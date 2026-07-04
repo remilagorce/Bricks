@@ -20,3 +20,6 @@ site/
 
 # OS noise
 .DS_Store
+
+# macOS AppleDouble junk (external drives)
+._*
