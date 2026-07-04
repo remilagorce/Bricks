@@ -1,0 +1,22 @@
+# Workspace data at the repo root — never commit a real workspace
+# (anchored: must NOT match plugins/bricks/)
+/bricks/
+
+# SQLite
+*.db
+*.db-wal
+*.db-shm
+
+# Secrets
+.env
+.env.*
+
+# Python
+__pycache__/
+*.pyc
+
+# MkDocs build output
+site/
+
+# OS noise
+.DS_Store
