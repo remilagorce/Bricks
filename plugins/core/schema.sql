@@ -46,5 +46,15 @@ CREATE TABLE IF NOT EXISTS messages (
   UNIQUE(person_id, step)
 );
 
+CREATE TABLE IF NOT EXISTS seed_customers (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  name       TEXT NOT NULL,
+  domain     TEXT UNIQUE,
+  source     TEXT,                              -- dictated | csv | hubspot | salesforce | pipedrive | ...
+  notes      TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT
+);
+
 CREATE INDEX IF NOT EXISTS idx_people_company ON people(company_id);
 CREATE INDEX IF NOT EXISTS idx_messages_person ON messages(person_id);

@@ -1,0 +1,12 @@
+{
+  "name": "find-crm-lookalike",
+  "description": "Find companies similar to your best customers. CRM-agnostic: seeds come from the seed_customers table, a CSV, or a dictated list — any CRM import brick can feed the same table later.",
+  "version": "0.1.0",
+  "author": {
+    "name": "Bricks team",
+    "url": "https://github.com/remilagorce/Bricks"
+  },
+  "repository": "https://github.com/remilagorce/Bricks",
+  "license": "MIT",
+  "keywords": ["gtm", "find", "lookalike", "sourcing"]
+}

@@ -18,7 +18,7 @@ import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
-TABLES = ("companies", "people", "messages")
+TABLES = ("companies", "people", "messages", "seed_customers")
 
 HTML = """<!doctype html>
 <html><head><meta charset="utf-8"><title>Bricks</title>
@@ -48,6 +48,7 @@ nav button.on{color:#fff;border-top-color:#ff5722}
 <button data-t="companies" class="on">Entreprises</button>
 <button data-t="people">Contacts</button>
 <button data-t="messages">Messages</button>
+<button data-t="seed_customers">Clients gagnés</button>
 </nav>
 <script>
 let table='companies',q='',data=[];
