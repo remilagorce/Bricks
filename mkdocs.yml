@@ -1,0 +1,80 @@
+site_name: Bricks
+site_description: The open-source GTM engine — replace Clay with open source and native integrations.
+site_url: https://your-org.github.io/bricks/
+repo_url: https://github.com/your-org/bricks
+repo_name: your-org/bricks
+
+theme:
+  name: material
+  logo: assets/logo.svg
+  favicon: assets/logo.svg
+  icon:
+    repo: fontawesome/brands/github
+  palette:
+    # Light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: deep orange
+      accent: deep orange
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    # Dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: deep orange
+      accent: deep orange
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+  font:
+    text: Inter
+    code: JetBrains Mono
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.top
+    - navigation.footer
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.code.annotate
+    - content.tabs.link
+
+nav:
+  - Home: index.md
+  - Quickstart: quickstart.md
+  - Your first workflow: your-first-workflow.md
+  - Find: find.md
+  - Transform: transform.md
+  - Enrich: enrich.md
+  - Automated inbound: automated-inbound.md
+  - Signal: signal.md
+  - Contribute: contribute.md
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - toc:
+      permalink: true
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/your-org/bricks
+    - icon: fontawesome/brands/x-twitter
+      link: https://x.com/your-handle
+
+copyright: Copyright &copy; 2026 Bricks — open source GTM
