@@ -1,0 +1,10 @@
+{
+  "name": "bricks",
+  "description": "Bricks — open-source GTM engine. Workspace management, find, enrich and transform skills operating on a per-workspace SQLite database.",
+  "version": "0.1.0",
+  "mcpServers": "./.mcp.json",
+  "author": {
+    "name": "Rémi Lagorce",
+    "url": "https://github.com/remilagorce"
+  }
+}

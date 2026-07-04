@@ -10,13 +10,9 @@
   },
   "plugins": [
     {
-      "name": "find",
-      "source": "./plugins/find",
-      "description": "Find companies and contacts from open and native data sources.",
-      "version": "0.1.0",
-      "author": {
-        "name": "Rémi Lagorce"
-      }
+      "name": "bricks",
+      "source": "./plugins/bricks",
+      "description": "Core GTM skills — workspace management, find, enrich and transform over a per-workspace SQLite database."
     }
   ]
 }

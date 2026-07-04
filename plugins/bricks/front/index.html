@@ -1,0 +1,442 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Bricks</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect x=%2210%22 y=%2210%22 width=%2280%22 height=%2280%22 rx=%2214%22 fill=%22%23ff5722%22/></svg>" />
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #121212;
+    --card: #171717;
+    --border: #2a2a2a;
+    --border-soft: #222222;
+    --text: #dddddd;
+    --text-dim: #888888;
+    --text-faint: #666666;
+    --accent: #ff5722;
+    --accent-soft: rgba(255, 87, 34, .12);
+    --danger: #ef4444;
+    --radius: 12px;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 14px/1.45 "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  #root { height: 100%; }
+
+  .app { display: flex; flex-direction: column; height: 100%; }
+
+  /* ---- top bar ---- */
+  .topbar {
+    display: flex; align-items: center; gap: 14px;
+    height: 54px; padding: 0 20px;
+    background: var(--card); border-bottom: 1px solid var(--border);
+    flex: none;
+  }
+  .brand { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 15px; letter-spacing: -0.01em; color: #fff; }
+  .brand .logo { color: var(--accent); font-size: 15px; }
+  .topbar .sep { width: 1px; height: 22px; background: var(--border); }
+  .ws-name { font-weight: 600; font-size: 13.5px; color: #fff; }
+  .ws-goal {
+    font-size: 12px; color: var(--text-dim);
+    background: #1c1c1c; border: 1px solid #333;
+    padding: 3px 10px; border-radius: 999px;
+    max-width: 340px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .topbar .spacer { flex: 1; }
+  .meta { font-size: 12px; color: var(--text-faint); font-variant-numeric: tabular-nums; }
+  .icon-btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 30px; height: 30px; border-radius: 8px;
+    border: 1px solid var(--border); background: var(--card);
+    color: var(--text-dim); cursor: pointer; font-size: 14px;
+    transition: background .12s, color .12s;
+  }
+  .icon-btn:hover { background: #1c1c1c; color: var(--text); }
+  .icon-btn.spinning { animation: spin .7s linear infinite; pointer-events: none; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ---- tabs (test-ee style: flat, orange bar on active) ---- */
+  .tabs { display: flex; align-items: center; gap: 2px; padding: 8px 20px 0; flex: none; }
+  .tab {
+    border: none; background: none;
+    padding: 9px 15px; border-radius: 0;
+    border-bottom: 2px solid transparent;
+    font-size: 13px; font-weight: 500; color: var(--text-dim);
+    cursor: pointer; transition: color .12s, border-color .12s; font-family: inherit;
+  }
+  .tab:hover { color: var(--text); }
+  .tab.active { color: #fff; font-weight: 600; border-bottom-color: var(--accent); }
+  .tab .count { color: var(--text-faint); font-weight: 400; margin-left: 6px; font-variant-numeric: tabular-nums; }
+
+  /* ---- table card ---- */
+  .table-zone { flex: 1; min-height: 0; padding: 12px 20px 20px; display: flex; flex-direction: column; }
+  .card {
+    flex: 1; min-height: 0; display: flex; flex-direction: column;
+    background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, .3), 0 8px 24px -12px rgba(0, 0, 0, .4);
+    overflow: hidden;
+  }
+  .grid-scroll { flex: 1; overflow: auto; }
+  table { border-collapse: separate; border-spacing: 0; min-width: 100%; }
+  thead th {
+    position: sticky; top: 0; z-index: 2;
+    background: #1c1c1c; text-align: left;
+    font-size: 11.5px; font-weight: 600; letter-spacing: .03em; text-transform: none;
+    color: var(--text-dim);
+    padding: 0 14px; height: 38px; vertical-align: middle;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  thead th .type-ico { color: var(--text-faint); font-weight: 500; margin-right: 7px; font-size: 11px; }
+  tbody td {
+    padding: 0 14px; height: 40px; vertical-align: middle;
+    font-size: 13px;
+    border-bottom: 1px solid var(--border-soft);
+    white-space: nowrap; max-width: 340px; overflow: hidden; text-overflow: ellipsis;
+  }
+  tbody tr { transition: background .08s; }
+  tbody tr:hover { background: #1c1c1c; }
+  tbody tr.selected { background: var(--accent-soft); }
+  tbody tr.selected td { border-bottom-color: rgba(255, 87, 34, .25); }
+
+  th.col-check, td.col-check { width: 40px; min-width: 40px; padding: 0 0 0 14px; }
+  th.col-num, td.col-num { width: 44px; min-width: 44px; text-align: right; padding-right: 10px; }
+  td.col-num { color: var(--text-faint); font-size: 11.5px; font-variant-numeric: tabular-nums; }
+  input[type="checkbox"] {
+    width: 15px; height: 15px; accent-color: var(--accent); cursor: pointer;
+    display: block;
+  }
+
+  .cell-empty { color: var(--text-faint); }
+  a.cell-link {
+    color: #ff8a65; text-decoration: none;
+    background: var(--accent-soft); border-radius: 6px; padding: 3px 8px;
+    font-size: 12.5px; font-weight: 500;
+  }
+  a.cell-link:hover { text-decoration: underline; }
+  .cell-num { font-variant-numeric: tabular-nums; }
+
+  /* ---- status chips (test-ee vocabulary) ---- */
+  .chip {
+    display: inline-block; padding: 1px 8px; border-radius: 999px;
+    font-size: 11px; background: #26262b; color: #9ca3af;
+  }
+  .s-pending { background: #26262b; color: #9ca3af; }
+  .s-running { background: #3a2b0a; color: #fbbf24; }
+  .s-done, .s-approved { background: #0d2f1b; color: #4ade80; }
+  .s-failed { background: #3b0d0d; color: #f87171; }
+  .s-not_found { background: #26262b; color: #6b7280; }
+  .s-disqualified { background: #3b0d0d; color: #ef4444; }
+  .s-draft { background: #12233f; color: #60a5fa; }
+  .s-sent { background: #0d2f2b; color: #2dd4bf; }
+  .s-new { background: #26262b; color: #9ca3af; }
+
+  .card-footer {
+    flex: none; display: flex; align-items: center; gap: 8px;
+    padding: 8px 16px; border-top: 1px solid var(--border-soft);
+    font-size: 12px; color: var(--text-faint); font-variant-numeric: tabular-nums;
+  }
+
+  /* ---- floating action bar ---- */
+  .action-bar {
+    position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%);
+    display: flex; align-items: center; gap: 14px;
+    background: #1c1c1c; color: #fff;
+    border: 1px solid #333;
+    padding: 10px 10px 10px 20px; border-radius: 999px;
+    box-shadow: 0 12px 32px -8px rgba(0, 0, 0, .6);
+    animation: rise .18s ease-out;
+    z-index: 10;
+  }
+  @keyframes rise { from { opacity: 0; transform: translate(-50%, 10px); } to { opacity: 1; transform: translate(-50%, 0); } }
+  .action-bar .sel-count { font-size: 13px; font-weight: 500; }
+  .action-bar .link-btn {
+    background: none; border: none; color: #888; font-size: 12.5px;
+    cursor: pointer; font-family: inherit; padding: 0;
+  }
+  .action-bar .link-btn:hover { color: #fff; }
+  .btn-danger {
+    border: none; cursor: pointer; font-family: inherit;
+    background: var(--danger); color: #fff;
+    font-size: 13px; font-weight: 600;
+    padding: 9px 18px; border-radius: 999px;
+    transition: background .12s;
+  }
+  .btn-danger:hover { background: #dc2626; }
+  .btn-danger:disabled { opacity: .6; cursor: default; }
+
+  /* ---- states ---- */
+  .state { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; color: var(--text-dim); }
+  .state .big { font-size: 34px; }
+  .state .title { font-weight: 600; color: var(--text); font-size: 15px; }
+  .state code { background: #1c1c1c; border: 1px solid #333; border-radius: 6px; padding: 2px 8px; font-size: 12.5px; }
+  .error-banner {
+    margin: 12px 20px 0; padding: 10px 16px;
+    background: #3b0d0d; border: 1px solid #5c1a1a; border-radius: 10px;
+    color: #f87171; font-size: 13px;
+  }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="module">
+import React, { useState, useEffect, useRef, useCallback } from "https://esm.sh/react@18.3.1";
+import { createRoot } from "https://esm.sh/react-dom@18.3.1/client";
+import htm from "https://esm.sh/htm@3.1.1";
+
+const html = htm.bind(React.createElement);
+
+async function api(path, options) {
+  const res = await fetch(path, options);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `${res.status} ${res.statusText}`);
+  return data;
+}
+
+const RE_URL = /^https?:\/\/\S+$/i;
+const RE_EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+const RE_DOMAIN = /^[a-z0-9-]+(\.[a-z0-9-]+)+$/i;
+const RE_NUM = /^-?\d+([.,]\d+)?$/;
+
+function columnType(header, values) {
+  // Status columns follow the shared vocabulary (CONVENTIONS §5) and render as chips.
+  if (header === "status" || header.endsWith("_status")) return "status";
+  const sample = values.filter(v => v !== "").slice(0, 20);
+  if (!sample.length) return "text";
+  if (sample.every(v => RE_NUM.test(v))) return "number";
+  if (sample.every(v => RE_EMAIL.test(v))) return "email";
+  if (sample.every(v => RE_URL.test(v) || RE_DOMAIN.test(v))) return "link";
+  return "text";
+}
+const TYPE_ICON = { text: "Aa", number: "#", email: "@", link: "\u{1F517}", status: "●" };
+
+function Cell({ value, type }) {
+  if (value === "") return html`<span class="cell-empty">—</span>`;
+  if (type === "status") return html`<span class=${"chip s-" + value}>${value}</span>`;
+  if (type === "email") return html`<a class="cell-link" href=${"mailto:" + value}>${value}</a>`;
+  if (type === "link") {
+    const href = RE_URL.test(value) ? value : "https://" + value;
+    return html`<a class="cell-link" href=${href} target="_blank" rel="noreferrer">${value}</a>`;
+  }
+  if (type === "number") return html`<span class="cell-num">${value}</span>`;
+  return html`<span title=${value}>${value}</span>`;
+}
+
+function App() {
+  const [status, setStatus] = useState(null);
+  const [active, setActive] = useState(null);          // active table name
+  const [table, setTable] = useState(null);            // {headers, rows}
+  const [selected, setSelected] = useState(new Set()); // 1-based row numbers
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [updatedAt, setUpdatedAt] = useState(null);
+  const activeRef = useRef(active);
+  activeRef.current = active;
+  const allRef = useRef(null);
+
+  const loadStatus = useCallback(async () => {
+    const st = await api("/api/status");
+    setStatus(st);
+    const tables = st.current ? st.current.tables : [];
+    if (tables.length && !tables.includes(activeRef.current)) setActive(tables[0]);
+    if (!tables.length) { setActive(null); setTable(null); }
+    return st;
+  }, []);
+
+  const loadTable = useCallback(async (name, { silent } = {}) => {
+    if (!name) return;
+    if (!silent) setLoading(true);
+    try {
+      const data = await api("/api/table/" + encodeURIComponent(name));
+      setTable(data);
+      // Prune selected ids that no longer exist (row deleted by a skill).
+      const idc = data.headers.indexOf("_id");
+      setSelected(prev => {
+        if (!prev.size) return prev;
+        const alive = new Set(idc >= 0 ? data.rows.map(r => r[idc]) : []);
+        const next = new Set([...prev].filter(id => alive.has(id)));
+        return next.size === prev.size ? prev : next;
+      });
+      setUpdatedAt(new Date());
+      setError(null);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const refresh = useCallback(async (silent = false) => {
+    try {
+      const st = await loadStatus();
+      const tables = st.current ? st.current.tables : [];
+      const name = tables.includes(activeRef.current) ? activeRef.current : tables[0];
+      if (name) await loadTable(name, { silent });
+      setError(null);
+    } catch (e) {
+      setError(e.message);
+    }
+  }, [loadStatus, loadTable]);
+
+  useEffect(() => { refresh(); }, []);
+  useEffect(() => {
+    if (!active) return;
+    setSelected(new Set());
+    setConfirming(false);
+    loadTable(active).catch(e => setError(e.message));
+  }, [active]);
+
+  // Light polling — selection is keyed by _id, so refreshing while rows are
+  // selected is safe (stale ids are pruned on load, numbers may shift, ids don't).
+  useEffect(() => {
+    const id = setInterval(() => {
+      if (!document.hidden) refresh(true);
+    }, 4000);
+    return () => clearInterval(id);
+  }, [refresh]);
+
+  const rows = table ? table.rows : [];
+  const allHeaders = table ? table.headers : [];
+  const idIdx = allHeaders.indexOf("_id");
+  const canSelect = idIdx >= 0;
+  // Technical columns (underscore-prefixed, e.g. _id) are never displayed.
+  const cols = allHeaders.map((h, i) => ({ h, i })).filter(({ h }) => !h.startsWith("_"));
+  const types = cols.map(({ h, i }) => columnType(h, rows.map(r => r[i] ?? "")));
+  const allChecked = canSelect && rows.length > 0 && selected.size === rows.length;
+  useEffect(() => {
+    if (allRef.current) allRef.current.indeterminate = selected.size > 0 && !allChecked;
+  }, [selected, allChecked]);
+
+  const toggleRow = (id) => {
+    const next = new Set(selected);
+    next.has(id) ? next.delete(id) : next.add(id);
+    setSelected(next);
+    setConfirming(false);
+  };
+  const toggleAll = () => {
+    setSelected(allChecked ? new Set() : new Set(rows.map(r => r[idIdx])));
+    setConfirming(false);
+  };
+
+  const doDelete = async () => {
+    if (!confirming) { setConfirming(true); return; }
+    setBusy(true);
+    try {
+      await api("/api/table/" + encodeURIComponent(active) + "/remove", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: [...selected] }),
+      });
+      setSelected(new Set());
+      setConfirming(false);
+      await refresh(true);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const current = status && status.current;
+  const tables = current ? current.tables : [];
+
+  let body;
+  if (status && !status.initialized) {
+    body = html`<div class="state">
+      <div class="big">\u{1F9F1}</div>
+      <div class="title">Bricks is not initialized here</div>
+      <div>Run <code>/bricks:workspace new <name></code> in Claude Code, then refresh.</div>
+    </div>`;
+  } else if (status && !status.currentWorkspace) {
+    body = html`<div class="state">
+      <div class="big">\u{1F4C2}</div>
+      <div class="title">No current workspace</div>
+      <div>Create one with <code>/bricks:workspace new <name></code>.</div>
+    </div>`;
+  } else if (status && tables.length === 0) {
+    body = html`<div class="state">
+      <div class="big">\u{1FA9F}</div>
+      <div class="title">No tables yet in ${status.currentWorkspace}</div>
+      <div>Run <code>/bricks:find</code> to build your first list.</div>
+    </div>`;
+  } else if (table) {
+    body = html`
+      <div class="table-zone">
+        <div class="card">
+          <div class="grid-scroll">
+            <table>
+              <thead><tr>
+                ${canSelect && html`<th class="col-check"><input type="checkbox" ref=${allRef} checked=${allChecked} onChange=${toggleAll} /></th>`}
+                <th class="col-num"></th>
+                ${cols.map(({ h }, k) => html`<th key=${h}><span class="type-ico">${TYPE_ICON[types[k]]}</span>${h}</th>`)}
+              </tr></thead>
+              <tbody>
+                ${rows.map((r, i) => {
+                  const rowId = canSelect ? r[idIdx] : null;
+                  const isSel = rowId !== null && selected.has(rowId);
+                  return html`<tr key=${rowId ?? i} class=${isSel ? "selected" : ""}>
+                    ${canSelect && html`<td class="col-check"><input type="checkbox" checked=${isSel} onChange=${() => toggleRow(rowId)} /></td>`}
+                    <td class="col-num">${i + 1}</td>
+                    ${cols.map(({ i: c }, k) => html`<td key=${k}><${Cell} value=${r[c] ?? ""} type=${types[k]} /></td>`)}
+                  </tr>`;
+                })}
+              </tbody>
+            </table>
+          </div>
+          <div class="card-footer">
+            <span>${rows.length} row${rows.length === 1 ? "" : "s"}</span><span>·</span>
+            <span>${cols.length} column${cols.length === 1 ? "" : "s"}</span>
+            ${updatedAt && html`<span>·</span><span>updated ${updatedAt.toLocaleTimeString()}</span>`}
+          </div>
+        </div>
+      </div>`;
+  } else {
+    body = html`<div class="state"><div class="title">Loading…</div></div>`;
+  }
+
+  return html`
+    <div class="app">
+      <div class="topbar">
+        <div class="brand"><span class="logo">■</span> Bricks</div>
+        ${current && html`
+          <div class="sep"></div>
+          <span class="ws-name">${status.currentWorkspace}</span>
+          ${current.goal && html`<span class="ws-goal" title=${current.goal}>${current.goal}</span>`}
+        `}
+        <div class="spacer"></div>
+        ${updatedAt && html`<span class="meta">synced ${updatedAt.toLocaleTimeString()}</span>`}
+        <button class=${"icon-btn" + (loading ? " spinning" : "")} title="Refresh" onClick=${() => refresh()}>↻</button>
+      </div>
+      ${error && html`<div class="error-banner">${error}</div>`}
+      ${tables.length > 0 && html`
+        <div class="tabs">
+          ${tables.map(t => html`
+            <button key=${t} class=${"tab" + (t === active ? " active" : "")} onClick=${() => setActive(t)}>
+              ${t.replace(/\.csv$/, "")}
+              ${t === active && table && html`<span class="count">${table.rows.length}</span>`}
+            </button>`)}
+        </div>`}
+      ${body}
+      ${selected.size > 0 && html`
+        <div class="action-bar">
+          <span class="sel-count">${selected.size} row${selected.size === 1 ? "" : "s"} selected</span>
+          <button class="link-btn" onClick=${() => { setSelected(new Set()); setConfirming(false); }}>Clear</button>
+          <button class="btn-danger" disabled=${busy} onClick=${doDelete}>
+            ${busy ? "Deleting…" : confirming ? `Confirm delete (${selected.size})` : "Delete"}
+          </button>
+        </div>`}
+    </div>`;
+}
+
+createRoot(document.getElementById("root")).render(html`<${App} />`);
+</script>
+</body>
+</html>
