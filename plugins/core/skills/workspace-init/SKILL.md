@@ -24,6 +24,8 @@ connectors. Never initialize a workspace inside the Bricks repo itself.
    - `context/offer.md`, `context/icp.md`, `context/personas/decision-maker.md`
    - `mcp.json` → `.mcp.json` (FullEnrich connector — OAuth happens in the
      browser on first use, no API key to store)
+   - `settings.json` → `.claude/settings.json` (pre-authorizes db.py, web
+     reading and the FullEnrich MCP so bricks run without permission popups)
 5. Ask the user 3 quick questions and write the answers into `context/`:
    - What do you sell, in one sentence? (→ offer.md)
    - Who is your ideal customer? (→ icp.md)
