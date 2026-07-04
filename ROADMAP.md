@@ -55,7 +55,6 @@ both Robin and Rémi.
 
 | Brick | IN → OUT |
 |---|---|
-| find-google-dorks | query/ICP → + companies |
 | find-directory-scrape | directory URL → + companies |
 | find-crm-lookalike | won-customers seed table → + lookalike companies |
 | enrich-company-firmographics | domain → headcount, industry, country (Pappers for FR) |
@@ -96,7 +95,7 @@ both Robin and Rémi.
    (or local clone) + `claude plugin install core@bricks …`.
 4. 30-minute team meeting: merge the core V1 PR scope, open the V1 issues,
    everyone claims their first brick.
-5. First new bricks: Robin → find-google-dorks (free, demo-friendly);
+5. First new bricks: Robin → find-directory-scrape (free, demo-friendly);
    Rémi → score-killer-gate + score-icp-fit (unlocks early-stop, pure script).
 6. Milestone demo: full pipeline with early-stop scoring on a real ICP —
    find → enrich → kill/score → emails → sequences, table telling the story.
