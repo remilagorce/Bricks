@@ -70,6 +70,7 @@ claude                       # start a session here
 # → enrich-email       (PAID — confirms volume first)
 # → write-sequence     (drafts only)
 python3 tools/db.py show     # the table tells the whole story
+python3 tools/viewer.py      # or live in the browser: tabs, chips, auto-refresh
 ```
 
 Offline test without FullEnrich: `python3 tools/db.py seed --csv fixtures/seed_companies.csv`

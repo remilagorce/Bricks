@@ -16,8 +16,9 @@ connectors. Never initialize a workspace inside the Bricks repo itself.
    repo (a `plugins/` directory with `.claude-plugin/` exists), refuse and ask
    the user to pick a dedicated directory (e.g. `~/bricks-workspaces/<client>/`).
 2. Copy the toolchain from this plugin:
-   - `${CLAUDE_PLUGIN_ROOT}/tools/db.py`  → `tools/db.py`
-   - `${CLAUDE_PLUGIN_ROOT}/schema.sql`   → `tools/schema.sql`
+   - `${CLAUDE_PLUGIN_ROOT}/tools/db.py`     → `tools/db.py`
+   - `${CLAUDE_PLUGIN_ROOT}/tools/viewer.py` → `tools/viewer.py`
+   - `${CLAUDE_PLUGIN_ROOT}/schema.sql`      → `tools/schema.sql`
 3. Create the database: `python3 tools/db.py init`
 4. Copy the workspace templates from `${CLAUDE_PLUGIN_ROOT}/templates/`:
    - `CLAUDE.workspace.md` → `CLAUDE.md`
