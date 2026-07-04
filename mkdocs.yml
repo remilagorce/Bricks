@@ -48,6 +48,7 @@ nav:
   - Find: find.md
   - Transform: transform.md
   - Enrich: enrich.md
+  - Orchestrate: orchestrate.md
   - Automated inbound: automated-inbound.md
   - Signal: signal.md
   - Contribute: contribute.md
