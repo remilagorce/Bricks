@@ -12,13 +12,23 @@ is what makes runs resumable, idempotent and parallelizable.
 
 ## Before anything: three mandatory gates
 
-**Gate 1 — FullEnrich connection.** Enrichment data comes from the
-`fullenrich` MCP server bundled with this plugin (waterfall over 20+
-providers). Check that `mcp__fullenrich__*` tools are available in your
-tool list. If they are not, the user is not signed in: STOP and tell them
-to run `/mcp`, pick `fullenrich` and sign in with their FullEnrich account
-in the browser, then retry. Never fabricate enrichment values as a
-fallback, and never scrape around the gate.
+**Gate 1 — the right source for the column.** Two kinds of enrichment,
+two sources:
+
+- **Contact/firmographic data** (emails, phones, employees, funding…) →
+  the `fullenrich` MCP server (waterfall over 20+ providers). Check that
+  `mcp__fullenrich__*` tools are available; if not, the user is not signed
+  in: STOP and tell them to run `/mcp`, pick `fullenrich`, sign in in the
+  browser, then retry. Never fabricate enrichment values as a fallback,
+  and never scrape around this gate.
+- **Web-content data** (what the site says: pitch, positioning, offering,
+  language, hiring page…) → read the sites. PREFER Bright Data
+  `scrape_as_markdown` when `mcp__brightdata__*` is available — JS
+  rendering and anti-bot handled, ~1 credit/page (money gate §8 at
+  volume). Plain WebFetch is the fallback for simple pages only. Rows
+  that fail on a 403/blocked fetch: retry ONCE through Bright Data
+  automatically before marking them `failed` — do not ask permission to
+  retry, that is what the tool is for.
 
 **Gate 2 — workspace.** Follow the mandatory procedure in
 `${CLAUDE_PLUGIN_ROOT}/CONVENTIONS.md` §2. This skill needs existing
@@ -55,11 +65,15 @@ rows in the receipt (do not disqualify silently — confirm with the user).
 
    `not_found` is a result, not an error — write it as the status and
    leave the value empty. `failed` means retryable. Never fabricate.
-   For big volumes, delegate batches to subagents: each subagent works its
-   batch and asks `db-writer` itself for the writes, returning ONLY counts
-   to you — no data through the conversation. FullEnrich bulk jobs are
-   asynchronous: store the job id in `memory/state.json` so an interrupted
-   run fetches results later instead of paying twice.
+   For big volumes, delegate batches to subagents — and parallelize
+   properly: batches of 5-8 rows each, up to 10 subagents launched IN
+   PARALLEL (in one message), next wave when a batch returns. 24 rows =
+   4-5 parallel batches, not 3 big sequential-ish lots. Each subagent asks
+   `db-writer` itself for the writes — ALWAYS passing the absolute
+   `bricks.db` path (CONVENTIONS §5) — and returns ONLY counts.
+   FullEnrich bulk jobs are asynchronous: store the job id in
+   `memory/state.json` so an interrupted run fetches results later instead
+   of paying twice.
 
 5. **Close the run** — a re-run picks up `pending` (and `failed` on
    request) rows automatically; no cursor needed. Update

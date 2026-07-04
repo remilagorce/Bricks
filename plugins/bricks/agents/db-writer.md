@@ -30,7 +30,14 @@ and report a receipt — never a raw dump.
 python3 "${CLAUDE_PLUGIN_ROOT}/tools/workspace.py" status
 ```
 
-- `initialized: false` → run `python3 "${CLAUDE_PLUGIN_ROOT}/tools/workspace.py" init`, then continue.
+- **If the caller gave you an absolute database path: skip resolution
+  entirely** and pass `--db <path>` to every command. This is the preferred
+  mode — callers are supposed to provide it.
+- `initialized: false` → DO NOT init. You are almost certainly running from
+  the wrong directory (subagents do not always inherit the session's cwd,
+  and a stray `init` creates a nested, orphaned `bricks/` tree — this bug
+  has happened in testing). Stop and ask the caller for the explicit
+  absolute `bricks.db` path.
 - No current workspace → stop and tell the caller; creating a workspace is
   the `workspace` skill's job, not yours.
 - Otherwise → operate on `current.path`'s `bricks.db` only.

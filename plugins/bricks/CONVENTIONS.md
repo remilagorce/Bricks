@@ -114,6 +114,12 @@ current workspace automatically (it reads `bricks/config.json`). Every
 command prints JSON; a non-zero exit code means the database was NOT
 modified — `db-writer` reports that back plainly, never retries blindly.
 
+**Always hand `db-writer` the absolute database path** (the current
+workspace's `bricks.db`, from `workspace.py status`) in the delegation
+message. Subagents do not reliably inherit the session's working directory;
+the explicit path makes every write land in the right database no matter
+where the agent runs from.
+
 The reference below is `db-writer`'s own contract with the tool — read it
 if you are implementing or debugging `db-writer` itself, or `db.py`. A
 skill author does not need to memorize this; describe the intent and let
