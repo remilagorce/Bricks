@@ -1,0 +1,21 @@
+# Workspaces are user data, never code
+workspaces/
+
+# SQLite databases (any stray workspace db)
+*.db
+*.db-wal
+*.db-shm
+
+# Secrets
+.env
+.env.*
+
+# Python
+__pycache__/
+*.pyc
+
+# MkDocs build output
+site/
+
+# OS noise
+.DS_Store

@@ -1,0 +1,12 @@
+{
+  "name": "write-sequence",
+  "description": "Write a 3-email outbound sequence (day 0 / +3 / +7) per contact, personalized from the workspace context and enriched columns. Drafts only — never sends.",
+  "version": "0.1.0",
+  "author": {
+    "name": "Bricks team",
+    "url": "https://github.com/remilagorce/Bricks"
+  },
+  "repository": "https://github.com/remilagorce/Bricks",
+  "license": "MIT",
+  "keywords": ["gtm", "copywriting", "sequence", "outbound"]
+}

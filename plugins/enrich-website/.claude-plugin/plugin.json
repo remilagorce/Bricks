@@ -1,0 +1,12 @@
+{
+  "name": "enrich-website",
+  "description": "Visit each company's website and extract pitch, language and size hint into the workspace database.",
+  "version": "0.1.0",
+  "author": {
+    "name": "Bricks team",
+    "url": "https://github.com/remilagorce/Bricks"
+  },
+  "repository": "https://github.com/remilagorce/Bricks",
+  "license": "MIT",
+  "keywords": ["gtm", "enrich", "scraping", "website"]
+}

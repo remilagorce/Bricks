@@ -1,0 +1,12 @@
+{
+  "name": "find-fullenrich",
+  "description": "Source companies and contacts matching an ICP via FullEnrich search (MCP). Creates rows in the workspace database.",
+  "version": "0.1.0",
+  "author": {
+    "name": "Bricks team",
+    "url": "https://github.com/remilagorce/Bricks"
+  },
+  "repository": "https://github.com/remilagorce/Bricks",
+  "license": "MIT",
+  "keywords": ["gtm", "find", "sourcing", "fullenrich"]
+}

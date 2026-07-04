@@ -1,0 +1,12 @@
+{
+  "name": "core",
+  "description": "Bricks core — the frozen contract every brick relies on: workspace scaffolding, SQLite schema, statuses vocabulary, and db.py (the single write door to the database).",
+  "version": "0.1.0",
+  "author": {
+    "name": "Bricks team",
+    "url": "https://github.com/remilagorce/Bricks"
+  },
+  "repository": "https://github.com/remilagorce/Bricks",
+  "license": "MIT",
+  "keywords": ["gtm", "core", "workspace", "database"]
+}

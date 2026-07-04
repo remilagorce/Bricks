@@ -10,12 +10,57 @@
   },
   "plugins": [
     {
+      "name": "core",
+      "source": "./plugins/core",
+      "description": "The frozen contract: workspace scaffolding, SQLite schema, statuses vocabulary, db.py.",
+      "version": "0.1.0",
+      "author": {
+        "name": "Bricks team"
+      }
+    },
+    {
       "name": "find",
       "source": "./plugins/find",
       "description": "Find companies and contacts from open and native data sources.",
       "version": "0.1.0",
       "author": {
         "name": "Rémi Lagorce"
+      }
+    },
+    {
+      "name": "find-fullenrich",
+      "source": "./plugins/find-fullenrich",
+      "description": "Source companies and contacts matching an ICP via FullEnrich search (MCP).",
+      "version": "0.1.0",
+      "author": {
+        "name": "Bricks team"
+      }
+    },
+    {
+      "name": "enrich-website",
+      "source": "./plugins/enrich-website",
+      "description": "Visit each company's website and extract pitch, language and size hint.",
+      "version": "0.1.0",
+      "author": {
+        "name": "Bricks team"
+      }
+    },
+    {
+      "name": "enrich-email",
+      "source": "./plugins/enrich-email",
+      "description": "Find verified professional emails via FullEnrich. Paid per contact, volume confirmed first.",
+      "version": "0.1.0",
+      "author": {
+        "name": "Bricks team"
+      }
+    },
+    {
+      "name": "write-sequence",
+      "source": "./plugins/write-sequence",
+      "description": "Write a personalized 3-email sequence per contact. Drafts only — never sends.",
+      "version": "0.1.0",
+      "author": {
+        "name": "Bricks team"
       }
     }
   ]
