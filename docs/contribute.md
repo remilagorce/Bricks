@@ -13,8 +13,8 @@ Vivamus magna justo, lacinia eget consectetur sed, convallis at tellus. Mauris b
 ## Development setup
 
 ```bash
-git clone https://github.com/your-org/bricks.git
-cd bricks
+git clone https://github.com/remilagorce/Bricks.git
+cd Bricks
 lorem ipsum install
 ```
 

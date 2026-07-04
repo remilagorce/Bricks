@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <a href="#">Documentation</a> ·
+  <a href="https://remilagorce.github.io/Bricks/">Documentation</a> ·
   <a href="#quickstart">Quickstart</a> ·
   <a href="#contributing">Contributing</a>
 </p>
@@ -35,7 +35,7 @@ Lorem ipsum dolor sit amet, consectetur adipiscing elit.
 lorem ipsum install bricks
 ```
 
-Full guide in the [documentation](#).
+Full guide in the [documentation](https://remilagorce.github.io/Bricks/quickstart/).
 
 ## Documentation
 
@@ -50,7 +50,7 @@ mkdocs serve
 
 ## Contributing
 
-Contributions are welcome! See the [Contribute](#) guide in the docs.
+Contributions are welcome! See the [Contribute](https://remilagorce.github.io/Bricks/contribute/) guide in the docs.
 
 ## License
 

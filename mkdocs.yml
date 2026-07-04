@@ -1,8 +1,8 @@
 site_name: Bricks
 site_description: The open-source GTM engine — replace Clay with open source and native integrations.
-site_url: https://your-org.github.io/bricks/
-repo_url: https://github.com/your-org/bricks
-repo_name: your-org/bricks
+site_url: https://remilagorce.github.io/Bricks/
+repo_url: https://github.com/remilagorce/Bricks
+repo_name: remilagorce/Bricks
 
 theme:
   name: material
@@ -74,7 +74,7 @@ markdown_extensions:
 extra:
   social:
     - icon: fontawesome/brands/github
-      link: https://github.com/your-org/bricks
+      link: https://github.com/remilagorce/Bricks
     - icon: fontawesome/brands/x-twitter
       link: https://x.com/your-handle
 
