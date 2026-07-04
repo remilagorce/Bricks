@@ -29,9 +29,20 @@ Follow the mandatory procedure in `${CLAUDE_PLUGIN_ROOT}/CONVENTIONS.md`:
 1. **Clarify the target** — ICP, geography, size, signals; default to
    `context/icp.md` when the user is vague. Write the agreed criteria to
    `memory/NOTES.md` so later runs (and enrich) know the intent.
-2. **Source** — query the agreed sources. For small runs (≲ 50 results,
-   single session), collect and commit directly. For large or
-   interruptible runs, append raw results to
+2. **Source** — in priority order:
+   1. **FullEnrich search** when `mcp__fullenrich__*` tools are present
+      and the target is a firmographic segment (industry, size,
+      geography, titles): free preview (10 results + total count), then
+      confirm the export volume per the money gate (§8). If FullEnrich is
+      NOT connected, say so once ("run `/mcp` → fullenrich to unlock the
+      B2B database") and fall back — never silently skip it.
+   2. **Bright Data** (`search_engine`, or the find-directory-scrape
+      skill for listing pages) when the target is niche/local commerce
+      that B2B databases cover poorly.
+   3. **Built-in web search** as the last resort — verify every domain.
+   State in the receipt which source was used and why.
+   For small runs (≲ 50 results, single session), collect and commit
+   directly. For large or interruptible runs, append raw results to
    `staging/find-<YYYY-MM-DD>/raw-results.jsonl` batch by batch and keep
    source cursors in `memory/state.json` (see CONVENTIONS §6).
 3. **Commit** — validate, then ask the `db-writer` agent to insert the

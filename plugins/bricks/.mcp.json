@@ -3,6 +3,10 @@
     "fullenrich": {
       "type": "http",
       "url": "https://mcp.fullenrich.com/mcp"
+    },
+    "brightdata": {
+      "type": "http",
+      "url": "https://mcp.brightdata.com/mcp?token=${BRIGHTDATA_API_TOKEN}"
     }
   }
 }

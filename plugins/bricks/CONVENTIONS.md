@@ -114,6 +114,12 @@ current workspace automatically (it reads `bricks/config.json`). Every
 command prints JSON; a non-zero exit code means the database was NOT
 modified — `db-writer` reports that back plainly, never retries blindly.
 
+**Always hand `db-writer` the absolute database path** (the current
+workspace's `bricks.db`, from `workspace.py status`) in the delegation
+message. Subagents do not reliably inherit the session's working directory;
+the explicit path makes every write land in the right database no matter
+where the agent runs from.
+
 The reference below is `db-writer`'s own contract with the tool — read it
 if you are implementing or debugging `db-writer` itself, or `db.py`. A
 skill author does not need to memorize this; describe the intent and let
@@ -212,3 +218,32 @@ staging and write the database directly.
   the status columns, not here. Update it at the end of every run.
 - `memory/NOTES.md` — free-form, human-read: decisions, context, open
   questions. Append at the bottom, newest last. Never rewrite history.
+
+## 8. Paid actions — the money gate
+
+Applies to ANY action that consumes credits or money: FullEnrich enrichment
+and exports, Bright Data requests at volume, any metered API. The protocol,
+in order, no exceptions:
+
+1. **Preview free first** when the provider offers it (FullEnrich search
+   returns 10 results + total count at no cost; a single Bright Data page
+   scout costs 1 credit).
+2. **Announce before spending**: the exact volume, the unit cost, and the
+   estimated total ("N contacts × 1 credit each").
+3. **Explicit confirmation** from the user. Silence is not consent.
+4. **Hard caps without an explicit override**: 50 paid enrichments, 100
+   sourced candidates, 10 scraped pages per run.
+5. **Never spend on the dead**: rows with `status='disqualified'` (or whose
+   parent company is disqualified) never consume a credit again.
+6. **Never pay twice**: statuses make re-runs skip `done` rows; async
+   job/batch ids live in `memory/state.json` (§6) so an interrupted run
+   fetches results instead of re-submitting.
+
+## 9. Brick contracts — BRICK.md
+
+Every skill directory carries a `BRICK.md`: the machine-checkable summary of
+its contract. IN (columns + status preconditions it reads), OUT (columns +
+statuses it writes), method, cost class (`free` | `cheap` | `paid`), error
+statuses. One page maximum. It is the file another teammate (or the docs
+generator) reads to know what the brick does without opening the SKILL —
+and the file a reviewer diffs to catch a contract change.
