@@ -72,19 +72,35 @@ function render(){
       const s=esc(String(v));
       if((c==='status'||c.endsWith('_status'))&&s)
         return '<td><span class="chip s-'+s+'">'+s+'</span></td>';
+      if(/^email_\d+$/.test(c)&&s){
+        const i=s.indexOf(' — ');
+        if(i>0)return '<td title="'+s+'"><span class="chip s-'+s.slice(0,i)+'">'+s.slice(0,i)+'</span> '+s.slice(i+3)+'</td>'}
       return '<td title="'+s+'">'+s+'</td>'}).join('')+'</tr>'}
   t.innerHTML=h}
 setInterval(load,2000);load();
 </script></body></html>"""
 
 
+PEOPLE_QUERY = (
+    "SELECT p.*, "
+    + ", ".join(
+        f"(SELECT m.status || ' — ' || COALESCE(m.subject, '') FROM messages m"
+        f" WHERE m.person_id = p.id AND m.step = {s}) AS email_{s}"
+        for s in (1, 2, 3)
+    )
+    + " FROM people p ORDER BY p.id DESC LIMIT 500"
+)
+
+
 def read_rows(db_path, table):
     con = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True, timeout=5)
     con.row_factory = sqlite3.Row
     try:
-        rows = con.execute(
-            f"SELECT * FROM {table} ORDER BY id DESC LIMIT 500"
-        ).fetchall()
+        if table == "people":
+            query = PEOPLE_QUERY
+        else:
+            query = f"SELECT * FROM {table} ORDER BY id DESC LIMIT 500"
+        rows = con.execute(query).fetchall()
         return [dict(r) for r in rows]
     finally:
         con.close()
