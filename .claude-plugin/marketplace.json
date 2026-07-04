@@ -73,6 +73,15 @@
       }
     },
     {
+      "name": "playbook-lookalike",
+      "source": "./plugins/playbook-lookalike",
+      "description": "Full lookalike motion: import winners, enrich them, find the discriminating signal, source and filter candidates. Composes bricks.",
+      "version": "0.1.0",
+      "author": {
+        "name": "Bricks team"
+      }
+    },
+    {
       "name": "write-sequence",
       "source": "./plugins/write-sequence",
       "description": "Write a personalized 3-email sequence per contact. Drafts only — never sends.",

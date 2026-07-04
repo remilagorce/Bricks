@@ -67,6 +67,8 @@ find-directory-scrape — La skill reçoit une URL d'annuaire (liste d'exposants
 
 find-crm-lookalike — Point important : elle n'attendra pas le CRM de Rémi. La skill accepte trois sources de seed : la table clients-gagnés (quand crm-best-customers existera), un CSV, ou une liste dictée (« mes 5 meilleurs clients sont… »). L'agent déduit le pattern commun (secteur, taille, géo, style), le formule en 3-4 requêtes de similarité, et un sous-agent cherche 3 à 5 sosies par seed. Chaque candidat passe par l'upsert domaine — les doublons avec l'existant fusionnent tout seuls.
 
+-> ici faut vérifier les dépendances avec d'autres plugins
+
 enrich-company-firmographics — L'astuce 100 % française : toute entreprise FR doit publier ses mentions légales → un script va chercher /mentions-legales et en sort le SIREN → appel API Pappers (script pur, pas d'agent) qui rend effectif, code NAF, pays… et les dirigeants, gratuitement. Fallback pour les non-FR : estimation par l'agent depuis site + LinkedIn, marquée comme estimation. Prérequis : les colonnes headcount/industry/country/siren dans la PR core, et une clé Pappers (quota gratuit).
 
 enrich-buying-committee — Elle exploite un raccourci propre à ton ICP : dans une boutique de 1 à 10 personnes, le comité d'achat, c'est le gérant — et son nom est déjà dans la base si firmographics est passée avant (dirigeants Pappers). Donc : si size_hint est solo/small → insertion directe du dirigeant en décideur, coût zéro. Sinon, sous-agent avec les title patterns de context/personas (recherche web ciblée, page équipe du site) pour trouver champion + décideur. C'est le plus bel exemple du relais par colonnes : elle lit ce que firmographics a écrit, sans jamais l'appeler.

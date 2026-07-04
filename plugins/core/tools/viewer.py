@@ -18,7 +18,12 @@ import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
-TABLES = ("companies", "people", "messages", "seed_customers")
+VIEWS = {
+    "companies": ("companies", "segment != 'seed'"),
+    "lookalike": ("companies", "segment = 'seed'"),
+    "people": ("people", None),
+    "messages": ("messages", None),
+}
 
 HTML = """<!doctype html>
 <html><head><meta charset="utf-8"><title>Bricks</title>
@@ -46,9 +51,9 @@ nav button.on{color:#fff;border-top-color:#ff5722}
 <div><table id="t"></table></div>
 <nav>
 <button data-t="companies" class="on">Entreprises</button>
+<button data-t="lookalike">Lookalike</button>
 <button data-t="people">Contacts</button>
 <button data-t="messages">Messages</button>
-<button data-t="seed_customers">Clients gagnés</button>
 </nav>
 <script>
 let table='companies',q='',data=[];
@@ -93,14 +98,16 @@ PEOPLE_QUERY = (
 )
 
 
-def read_rows(db_path, table):
+def read_rows(db_path, view):
+    table, where = VIEWS[view]
     con = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True, timeout=5)
     con.row_factory = sqlite3.Row
     try:
-        if table == "people":
+        if view == "people":
             query = PEOPLE_QUERY
         else:
-            query = f"SELECT * FROM {table} ORDER BY id DESC LIMIT 500"
+            clause = f" WHERE {where}" if where else ""
+            query = f"SELECT * FROM {table}{clause} ORDER BY id DESC LIMIT 500"
         rows = con.execute(query).fetchall()
         return [dict(r) for r in rows]
     finally:
@@ -117,7 +124,7 @@ class Handler(BaseHTTPRequestHandler):
             content_type = "text/html; charset=utf-8"
         elif parsed.path == "/data":
             table = parse_qs(parsed.query).get("table", ["companies"])[0]
-            if table not in TABLES:
+            if table not in VIEWS:
                 self.send_error(404, "unknown table")
                 return
             try:

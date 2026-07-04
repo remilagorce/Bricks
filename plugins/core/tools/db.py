@@ -29,7 +29,7 @@ import sys
 from datetime import datetime, timezone
 
 DB_FILE = "bricks.db"
-TABLES = ("companies", "people", "messages", "seed_customers")
+TABLES = ("companies", "people", "messages")
 IDENT_RE = re.compile(r"^[a-z][a-z0-9_]*$")
 
 

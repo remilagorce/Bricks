@@ -1,0 +1,12 @@
+{
+  "name": "playbook-lookalike",
+  "description": "The full lookalike motion: import best customers from any source, enrich them with every available brick, discover the discriminating signal, source candidates, filter them on that signal. A playbook — it composes bricks, present and future.",
+  "version": "0.1.0",
+  "author": {
+    "name": "Bricks team",
+    "url": "https://github.com/remilagorce/Bricks"
+  },
+  "repository": "https://github.com/remilagorce/Bricks",
+  "license": "MIT",
+  "keywords": ["gtm", "playbook", "lookalike", "orchestration"]
+}
