@@ -5,6 +5,12 @@ description: Find companies similar to the user's best customers — "trouve des
 
 # Find lookalikes of the best customers
 
+**Routing check first**: if the user wants the COMPLETE motion — enrich the
+seeds to the maximum, discover the discriminating signal, source candidates
+via FullEnrich, and filter them on that signal — hand over to
+`playbook-lookalike` instead. This skill is ONLY the similarity-search
+step; used alone on bare seeds it will produce shallow lookalikes.
+
 Turns seed customers into a list of similar prospects. Seeds live in the
 `companies` table with `segment='seed'` — ON PURPOSE: every enrichment
 skill, present and future, can enrich them with a plain
