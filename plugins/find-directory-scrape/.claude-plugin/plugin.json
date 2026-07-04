@@ -1,0 +1,12 @@
+{
+  "name": "find-directory-scrape",
+  "description": "Source companies from any online directory (trade-show exhibitor lists, curated listicles, industry directories) via Bright Data scraping — JS rendering and anti-bot handled by the provider.",
+  "version": "0.1.0",
+  "author": {
+    "name": "Bricks team",
+    "url": "https://github.com/remilagorce/Bricks"
+  },
+  "repository": "https://github.com/remilagorce/Bricks",
+  "license": "MIT",
+  "keywords": ["gtm", "find", "sourcing", "scraping", "brightdata"]
+}

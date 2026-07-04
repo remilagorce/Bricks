@@ -28,6 +28,15 @@
       }
     },
     {
+      "name": "find-directory-scrape",
+      "source": "./plugins/find-directory-scrape",
+      "description": "Source companies from any online directory via Bright Data scraping (JS + anti-bot handled).",
+      "version": "0.1.0",
+      "author": {
+        "name": "Bricks team"
+      }
+    },
+    {
       "name": "find-fullenrich",
       "source": "./plugins/find-fullenrich",
       "description": "Source companies and contacts matching an ICP via FullEnrich search (MCP).",

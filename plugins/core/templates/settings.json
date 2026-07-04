@@ -3,7 +3,8 @@
     "allow": [
       "Bash(python3 tools/db.py:*)",
       "WebFetch",
-      "mcp__fullenrich"
+      "mcp__fullenrich",
+      "mcp__brightdata"
     ]
   }
 }
