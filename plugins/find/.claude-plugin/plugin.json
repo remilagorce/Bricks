@@ -1,0 +1,13 @@
+{
+  "name": "find",
+  "description": "Find companies and contacts from open and native data sources.",
+  "version": "0.1.0",
+  "author": {
+    "name": "Rémi Lagorce",
+    "url": "https://github.com/remilagorce"
+  },
+  "homepage": "https://remilagorce.github.io/Bricks/find/",
+  "repository": "https://github.com/remilagorce/Bricks",
+  "license": "MIT",
+  "keywords": ["gtm", "prospecting", "leads", "clay-alternative"]
+}

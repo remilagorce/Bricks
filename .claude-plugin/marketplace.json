@@ -1,0 +1,22 @@
+{
+  "name": "bricks",
+  "owner": {
+    "name": "Rémi Lagorce",
+    "url": "https://github.com/remilagorce"
+  },
+  "metadata": {
+    "description": "Bricks — the open-source GTM engine. Replace Clay with open source and native integrations.",
+    "version": "0.1.0"
+  },
+  "plugins": [
+    {
+      "name": "find",
+      "source": "./plugins/find",
+      "description": "Find companies and contacts from open and native data sources.",
+      "version": "0.1.0",
+      "author": {
+        "name": "Rémi Lagorce"
+      }
+    }
+  ]
+}
