@@ -17,7 +17,7 @@
 
 ---
 
-## What is Bricks?
+## What is Bricks? 
 
 Bricks is an open-source alternative to Clay. Instead of paying per credit inside a closed spreadsheet, you compose your GTM workflows from open bricks connected directly to the native tools you already use.
 
