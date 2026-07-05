@@ -51,12 +51,19 @@ NAF_SECTIONS = [
 ]
 
 EXCLUDED_ROLES = re.compile(r"commissaire", re.IGNORECASE)
+LEGAL_FORMS = {"sas", "sasu", "sarl", "eurl", "sa", "sci", "snc", "scop", "sel", "selarl"}
+PARENT_ROLES = re.compile(r"pr[ée]sident|g[ée]rant", re.IGNORECASE)
 
 
 def normalize(text):
     text = unicodedata.normalize("NFKD", text or "")
     text = "".join(c for c in text if not unicodedata.combining(c))
     return re.sub(r"[^a-z0-9]+", " ", text.lower()).strip()
+
+
+def simplified(name):
+    tokens = [t for t in normalize(name).split() if t not in LEGAL_FORMS]
+    return " ".join(tokens[:2])
 
 
 def naf_section(naf):
@@ -71,7 +78,7 @@ def naf_section(naf):
 
 
 def executives_of(record):
-    people = []
+    people, parent = [], None
     for d in record.get("dirigeants", []):
         role = (d.get("qualite") or "").strip()
         if EXCLUDED_ROLES.search(role):
@@ -80,17 +87,25 @@ def executives_of(record):
             (d.get("prenoms") or "").strip().title(),
             (d.get("nom") or "").strip().title(),
         ] if p)
+        entity = False
         if not name:
             name = (d.get("denomination") or "").strip()
+            entity = bool(name)
         if name:
-            people.append({"name": name, "role": role})
-    return people
+            person = {"name": name, "role": role}
+            if entity:
+                person["entity"] = True
+                if parent is None and PARENT_ROLES.search(role):
+                    parent = name
+            people.append(person)
+    return people, parent
 
 
 def shape(record):
     siege = record.get("siege") or {}
     code = record.get("tranche_effectif_salarie")
-    return {
+    executives, parent = executives_of(record)
+    out = {
         "siren": record.get("siren"),
         "legal_name": record.get("nom_complet"),
         "naf": record.get("activite_principale"),
@@ -100,8 +115,11 @@ def shape(record):
         "city": siege.get("libelle_commune"),
         "postal": siege.get("code_postal"),
         "country": "FR",
-        "executives": executives_of(record),
+        "executives": executives,
     }
+    if parent:
+        out["parent_company"] = parent
+    return out
 
 
 def score(record, wanted_norm, hint_norm):
@@ -122,18 +140,32 @@ def score(record, wanted_norm, hint_norm):
     return s
 
 
-def lookup(name, hint=""):
-    query = urllib.parse.urlencode({"q": name, "page": 1, "per_page": 5})
+def fetch(q):
+    query = urllib.parse.urlencode({"q": q, "page": 1, "per_page": 5})
     request = urllib.request.Request(
         f"{API}?{query}", headers={"User-Agent": "bricks-firmographics"}
     )
+    with urllib.request.urlopen(request, timeout=15) as response:
+        return json.load(response).get("results", [])
+
+
+def lookup(name, hint="", siren=""):
+    siren = re.sub(r"\D", "", str(siren or ""))
     try:
-        with urllib.request.urlopen(request, timeout=15) as response:
-            data = json.load(response)
+        if len(siren) == 9:
+            for record in fetch(siren):
+                if record.get("siren") == siren:
+                    out = shape(record)
+                    out["confidence"] = "high"
+                    return out
+            return {"confidence": "none", "error": "siren not found"}
+        results = fetch(name)
+        if not results and simplified(name) not in ("", normalize(name)):
+            time.sleep(RATE_SLEEP)
+            results = fetch(simplified(name))
     except Exception as e:
         return {"confidence": "none", "error": f"api error: {e}"}
 
-    results = data.get("results", [])
     if not results:
         return {"confidence": "none"}
 
@@ -178,7 +210,8 @@ def main():
             if not line:
                 continue
             row = json.loads(line)
-            result = lookup(row.get("name", ""), row.get("hint", ""))
+            result = lookup(row.get("name", ""), row.get("hint", ""),
+                            row.get("siren", ""))
             result["_id"] = row.get("_id")
             print(json.dumps(result, ensure_ascii=False), flush=True)
             time.sleep(RATE_SLEEP)

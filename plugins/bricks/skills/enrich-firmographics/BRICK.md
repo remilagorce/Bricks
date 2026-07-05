@@ -19,9 +19,14 @@
 
 - `employees` (range string, e.g. "50-99"), `industry` (NAF section
   label), `naf` (code), `siren`, `city`, `executives` (JSON list of
-  {name, role}, statutory auditors excluded).
+  {name, role}, statutory auditors excluded; `entity: true` marks
+  corporate officers).
+- `parent_company` when the legal representative is a company — the
+  "group-owned, not independent" signal, receipt-flagged for kill rules.
 - `firmo_status` → `done` | `not_found` | `failed`;
   `firmo_source='estimate'` marks pass-3 grade data.
+- Rows already carrying a `siren` are re-looked-up exactly (no matching
+  ambiguity) — pass-2 outputs re-enter pass 1 cleanly.
 
 ## Errors
 
