@@ -73,11 +73,12 @@ next week automatically joins existing motions.
 | workspace / interface / find / enrich / transform / scan-mentions | Rémi | ✅ shipped (find + enrich patched after test #1) |
 | find-directory-scrape / find-lookalike / write-sequence / playbook-lookalike | Robin | ✅ shipped |
 | enrich-firmographics (+ tools/firmo.py, official gov API) | Robin | ✅ shipped |
+| enrich-buying-committee (targeting plan + waterfall) | Robin | ✅ shipped |
 | Bright Data + FullEnrich MCP wiring | Robin | ✅ shipped, both Connected |
 
 ### To build — Robin (data in)
 
-enrich-buying-committee · enrich-person-profile · signal-sillage
+enrich-person-profile · signal-sillage
 
 ### To build — Rémi (data out)
 
@@ -204,17 +205,22 @@ issue per brick, assign = claim) · demo script.
   site + public LinkedIn estimate, flagged. Cheap columns → run early,
   feeds the kill gate AND enrich-buying-committee.
 
-### To build — Robin (data in)
+**enrich-buying-committee** ✅ (moved to shipped)
+- IN: firmographics-enriched companies (`employees`, `executives`,
+  `parent_company`, `company_category`) + ICP buying roles + personas.
+- OUT: ONE verified contact per company — `role_type` champion OR
+  decision-maker (chosen by strategy, never both), title, linkedin_url,
+  source; `committee_status` on companies; `targeting_plan` persisted.
+- Strategy: Phase 0 — a user-confirmed targeting plan derived from ICP +
+  offer (small co → decision-maker; large co + expensive offer →
+  champion first; title patterns per type; fallback rule). Phase 1 —
+  cost-ordered waterfall per company, stop at first verified hit:
+  registry relay (free) → FullEnrich people search (free) → LinkedIn via
+  SERP snippets (~1 credit, never logged-in) → team page scrape.
+  Verification everywhere; not_found is honest; group-owned companies
+  skip the registry rung.
 
-**enrich-buying-committee**
-- IN: enriched company row + `context/icp.md` buying roles + personas.
-- OUT: `contacts` rows (full_name, role champion|decision-maker,
-  company_id).
-- Strategy: size-based shortcut — small companies (his ICP): the
-  decision-maker IS the gérant, already in `executives` from Pappers, zero
-  cost. Larger: subagent web search on title patterns (site team page,
-  public LinkedIn results). The textbook example of column relay:
-  it reads what firmographics wrote, never calls it.
+### To build — Robin (data in)
 
 **enrich-person-profile**
 - IN: `contacts` with full_name + company, `profile_status='pending'`.
