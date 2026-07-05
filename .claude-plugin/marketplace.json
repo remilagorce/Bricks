@@ -6,13 +6,14 @@
   },
   "metadata": {
     "description": "Bricks — the open-source GTM engine. Replace Clay with open source and native integrations.",
-    "version": "0.1.0"
+    "version": "0.2.0"
   },
   "plugins": [
     {
       "name": "bricks",
       "source": "./plugins/bricks",
-      "description": "Core GTM skills — workspace management, find, enrich and transform over a per-workspace SQLite database."
+      "description": "Core GTM skills — workspace management, find, enrich and transform over a per-workspace SQLite database.",
+      "version": "0.2.0"
     }
   ]
 }
