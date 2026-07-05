@@ -78,6 +78,14 @@ writing anything and ask which they want:
 
 Never mix two clients or two offers inside one workspace.
 
+**Never name the context files to the user.** `offer.md`, `icp.md`,
+`personas/…` are internal plumbing. Talk about their *content* freely ("ton
+ICP vise les cliniques privées", "d'après ton offre…") but never surface the
+file names or paths ("j'ai écrit dans `context/icp.md`", "regarde
+`offer.md`") — the user reasons about their GTM, not about our file tree.
+The only exception is when the user explicitly asks where something is
+stored.
+
 ## 4. FullEnrich connection gate (mandatory check)
 
 Bricks ships with the `fullenrich` MCP server (waterfall enrichment over
@@ -238,12 +246,3 @@ in order, no exceptions:
 6. **Never pay twice**: statuses make re-runs skip `done` rows; async
    job/batch ids live in `memory/state.json` (§6) so an interrupted run
    fetches results instead of re-submitting.
-
-## 9. Brick contracts — BRICK.md
-
-Every skill directory carries a `BRICK.md`: the machine-checkable summary of
-its contract. IN (columns + status preconditions it reads), OUT (columns +
-statuses it writes), method, cost class (`free` | `cheap` | `paid`), error
-statuses. One page maximum. It is the file another teammate (or the docs
-generator) reads to know what the brick does without opening the SKILL —
-and the file a reviewer diffs to catch a contract change.

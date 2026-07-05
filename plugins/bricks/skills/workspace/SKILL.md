@@ -50,11 +50,12 @@ always know which world they are in.
   `--goal` when the user has stated an objective — other skills read it to
   pick up context.
 - **After `new`** → the workspace is scaffolded with `context/` (offer.md,
-  icp.md, personas/) and an empty `bricks.db`. Offer to fill the context
-  now with three quick questions: what do you sell (one sentence)? who is
-  the ideal customer? any hard disqualifiers (size, country…)? Write the
-  answers into `context/offer.md` and `context/icp.md` (kill rules
-  section). If the user prefers later, leave the TODO placeholders.
+  icp.md, personas/) and an empty `bricks.db`, but the context is still
+  TODO placeholders. Hand off immediately to the **`gtm-onboard`** skill to
+  run ICP discovery in the fresh workspace — it is the brick that infers,
+  challenges and (via `context-write`) fills the context. Do not fill
+  `context/` by hand here. If the user declines onboarding for now, leave
+  the TODO placeholders and move on.
 - **Drift guardrail** — if the user's request contradicts the current
   workspace's `context/` (another product, another ICP), STOP and ask:
   switch, new workspace, or update the context? See CONVENTIONS §3.

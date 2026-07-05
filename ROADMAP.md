@@ -78,7 +78,13 @@ next week automatically joins existing motions.
 
 ### To build — Robin (data in)
 
-enrich-person-profile · signal-sillage
+enrich-person-profile · find-company-people · signal-sillage
+
+> Considered & rejected: **enrich-company** — a standalone "enrich a company"
+> brick would duplicate the generic `enrich` skill (any company column via
+> FullEnrich / web content) plus `enrich-firmographics` (the structured
+> subset). Rule 1 forbids the overlap. If international firmographics ever
+> needs its own path, extend `enrich-firmographics`, don't fork a new brick.
 
 ### To build — Rémi (data out)
 
@@ -278,6 +284,30 @@ receipts only in the conversation.
   read the indexed snippet, never log into LinkedIn (ToS + burned
   accounts). Complement with team pages / press bios. `not_found` is an
   acceptable answer; never guess.
+
+**find-company-people** (user-requested as `find-people-company`)
+- IN: `companies` rows already in the DB (`domain` ideally),
+  `people_status='pending'`, `status != 'disqualified'` + a role/title
+  pattern (from the user or `context/icp.md` Buying roles / `personas/`).
+- OUT: MULTIPLE `contacts` rows per company — `company_id`, `full_name`,
+  `role`, `linkedin_url`, `email` (optional), `source` — deduped on
+  (company_id + full_name/email); `companies.people_status` →
+  `done | not_found | failed`. Optional per-company cap on N.
+- Strategy: the "expand one company into its roster" brick — deliberately
+  the OPPOSITE end from enrich-buying-committee. Where buying-committee
+  returns ONE opinionated target per the plan, find-company-people returns
+  the full matching SET when the user wants breadth (multi-threading,
+  several stakeholders). Cost-ordered like the committee waterfall but
+  without the "stop at first hit": FullEnrich people search (free) for the
+  title pattern + domain → LinkedIn SERP via Bright Data
+  (`site:linkedin.com/in "<title>" "<company>"`, indexed snippets only,
+  never logged in, ~1 credit/query, capped) → team/about page scrape.
+  Announce the volume (N companies × cap) under the money gate §8 before
+  spending. Verify name + role + company cohere in the source; unverifiable
+  → skip, never invent. Feeds enrich-person-profile (roster → per-person
+  enrichment) and write-sequence. Boundary is explicit so Claude never
+  confuses the two: committee = pick THE contact; find-company-people =
+  list ALL matching contacts.
 
 **signal-sillage**
 - IN: qualified accounts (tier A/B once scoring exists).

@@ -183,6 +183,48 @@
     background: #3b0d0d; border: 1px solid #5c1a1a; border-radius: 10px;
     color: #f87171; font-size: 13px;
   }
+
+  /* ---- export button + modal ---- */
+  .btn-export {
+    display: inline-flex; align-items: center; gap: 6px;
+    height: 30px; padding: 0 14px; border-radius: 8px;
+    border: 1px solid var(--border); background: var(--card);
+    color: var(--text); cursor: pointer; font-size: 13px; font-weight: 500;
+    font-family: inherit; transition: background .12s, border-color .12s;
+  }
+  .btn-export:hover { background: #1c1c1c; border-color: #3a3a3a; }
+  .btn-export:disabled { opacity: .5; cursor: default; }
+
+  .modal-overlay {
+    position: fixed; inset: 0; z-index: 50;
+    background: rgba(0, 0, 0, .55);
+    display: flex; align-items: center; justify-content: center;
+    animation: fade .12s ease-out;
+  }
+  @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+  .modal {
+    width: 400px; max-width: calc(100vw - 40px);
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: 0 20px 60px -12px rgba(0, 0, 0, .7);
+    padding: 20px; animation: rise2 .15s ease-out;
+  }
+  @keyframes rise2 { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+  .modal-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .modal-head h3 { margin: 0; font-size: 15px; font-weight: 600; color: #fff; }
+  .modal-sub { margin: 6px 0 16px; font-size: 12.5px; color: var(--text-dim); }
+  .export-opts { display: flex; gap: 12px; }
+  .export-opt {
+    flex: 1; display: flex; flex-direction: column; gap: 4px;
+    padding: 16px 14px; border-radius: 10px;
+    border: 1px solid var(--border); background: #1c1c1c;
+    cursor: pointer; font-family: inherit; text-align: left;
+    transition: border-color .12s, background .12s;
+  }
+  .export-opt:hover { border-color: var(--accent); background: var(--accent-soft); }
+  .export-opt:disabled { opacity: .6; cursor: default; }
+  .export-opt .fmt { font-size: 15px; font-weight: 600; color: #fff; }
+  .export-opt .fmt-desc { font-size: 11.5px; color: var(--text-dim); }
 </style>
 </head>
 <body>
@@ -199,6 +241,25 @@ async function api(path, options) {
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || `${res.status} ${res.statusText}`);
   return data;
+}
+
+function toCSV(headers, rows) {
+  const esc = (v) => {
+    const s = String(v ?? "");
+    return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  };
+  return [headers, ...rows].map(row => row.map(esc).join(",")).join("\r\n");
+}
+
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
 }
 
 const RE_URL = /^https?:\/\/\S+$/i;
@@ -236,6 +297,8 @@ function App() {
   const [table, setTable] = useState(null);            // {headers, rows}
   const [selected, setSelected] = useState(new Set()); // 1-based row numbers
   const [confirming, setConfirming] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
+  const [exporting, setExporting] = useState(null);    // "csv" | "xlsx" while running
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -345,6 +408,32 @@ function App() {
     }
   };
 
+  const doExport = async (format) => {
+    if (!table || exporting) return;
+    const headers = cols.map(({ h }) => h);
+    const dataRows = rows.map(r => cols.map(({ i }) => r[i] ?? ""));
+    const base = (active || "export").replace(/\.csv$/, "");
+    setExporting(format);
+    try {
+      if (format === "csv") {
+        const csv = "\uFEFF" + toCSV(headers, dataRows); // BOM: Excel reads UTF-8
+        downloadBlob(new Blob([csv], { type: "text/csv;charset=utf-8" }), base + ".csv");
+      } else {
+        const XLSX = await import("https://esm.sh/xlsx@0.18.5");
+        const sheet = XLSX.utils.aoa_to_sheet([headers, ...dataRows]);
+        const wb = XLSX.utils.book_new();
+        const sheetName = (base.replace(/[\\/?*\[\]:]/g, "").slice(0, 31)) || "Sheet1";
+        XLSX.utils.book_append_sheet(wb, sheet, sheetName);
+        XLSX.writeFile(wb, base + ".xlsx");
+      }
+      setExportOpen(false);
+    } catch (e) {
+      setError("Export failed: " + e.message);
+    } finally {
+      setExporting(null);
+    }
+  };
+
   const current = status && status.current;
   const tables = current ? current.tables : [];
 
@@ -413,6 +502,10 @@ function App() {
         `}
         <div class="spacer"></div>
         ${updatedAt && html`<span class="meta">synced ${updatedAt.toLocaleTimeString()}</span>`}
+        ${table && rows.length > 0 && html`
+          <button class="btn-export" title="Exporter la table" onClick=${() => setExportOpen(true)}>
+            <span>⭳</span> Exporter
+          </button>`}
         <button class=${"icon-btn" + (loading ? " spinning" : "")} title="Refresh" onClick=${() => refresh()}>↻</button>
       </div>
       ${error && html`<div class="error-banner">${error}</div>`}
@@ -432,6 +525,26 @@ function App() {
           <button class="btn-danger" disabled=${busy} onClick=${doDelete}>
             ${busy ? "Deleting…" : confirming ? `Confirm delete (${selected.size})` : "Delete"}
           </button>
+        </div>`}
+      ${exportOpen && html`
+        <div class="modal-overlay" onClick=${() => !exporting && setExportOpen(false)}>
+          <div class="modal" onClick=${e => e.stopPropagation()}>
+            <div class="modal-head">
+              <h3>Exporter ${(active || "").replace(/\.csv$/, "")}</h3>
+              <button class="icon-btn" title="Fermer" disabled=${!!exporting} onClick=${() => setExportOpen(false)}>✕</button>
+            </div>
+            <p class="modal-sub">${rows.length} ligne${rows.length === 1 ? "" : "s"} · ${cols.length} colonne${cols.length === 1 ? "" : "s"}. Choisis un format.</p>
+            <div class="export-opts">
+              <button class="export-opt" disabled=${!!exporting} onClick=${() => doExport("csv")}>
+                <span class="fmt">${exporting === "csv" ? "Export…" : "CSV"}</span>
+                <span class="fmt-desc">Texte brut, compatible tous tableurs</span>
+              </button>
+              <button class="export-opt" disabled=${!!exporting} onClick=${() => doExport("xlsx")}>
+                <span class="fmt">${exporting === "xlsx" ? "Export…" : "XLSX"}</span>
+                <span class="fmt-desc">Classeur Excel natif</span>
+              </button>
+            </div>
+          </div>
         </div>`}
     </div>`;
 }
