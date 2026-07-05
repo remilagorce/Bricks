@@ -95,3 +95,14 @@ write a workflow:
 
 In short: natural language conversation → automatic delegation is fine.
 A workflow you want to trust and re-run → dispatch explicitly.
+
+## Rule 3 — bump the version on every plugin change
+
+Installed plugins are cached BY VERSION: if `plugins/bricks/` changes but
+`version` stays the same, `claude plugin update` answers "already at latest"
+and every session keeps running the stale cache — silently. Any change under
+`plugins/bricks/` ships with a version bump in BOTH
+`plugins/bricks/.claude-plugin/plugin.json` and
+`.claude-plugin/marketplace.json`, then `claude plugin update bricks@bricks`
+and a session restart. (This bug cost us two test sessions running a plugin
+from before the merge.)
