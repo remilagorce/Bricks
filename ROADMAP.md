@@ -75,13 +75,16 @@ next week automatically joins existing motions.
 | enrich-firmographics (+ tools/firmo.py, official gov API) | Robin | ✅ shipped, field-tested ×2 |
 | enrich-buying-committee (targeting plan + waterfall) | Robin | ✅ shipped, field-tested |
 | enrich-person-profile (identity waterfall, FullEnrich-search first) | Robin | ✅ shipped, field-tested ×1 (0.4.1 patches) |
-| signal-person (job change / hiring / posts / news scan) | Robin | ✅ shipped, field-tested ×1 (0.4.2 patches) |
+| signal-person (job change / hiring / posts / news scan) | Robin | ✅ shipped, field-tested ×2 (0.4.2 + 0.5.1 patches) |
+| find-hiring-signal (pain-matrix job-post sourcing) | Robin | ✅ shipped, field-tested ×1 (0.5.1 patches; survived a full Bright Data outage at 0 credits) |
+| tools/jobs.py (deterministic hunt engine: France Travail + HelloWork + career pages) | Robin | ✅ shipped, live-validated (reproduced both Gironde field runs, 0 credits, seconds) |
+| tools/news.py (company-news engine: Google News RSS + warning flag) | Robin | ✅ shipped, live-validated (SOPREMA/Predictice/MORICEAU spread) |
 | Bright Data + FullEnrich MCP wiring | Robin | ✅ shipped, both Connected |
 
 ### Field-test log — the loop that improves the product
 
 Every fix below came from a real desktop test session. Plugin version at
-head: **0.4.2**.
+head: **0.7.2**.
 
 | Version | Trigger | What changed |
 |---|---|---|
@@ -93,6 +96,13 @@ head: **0.4.2**.
 | 0.4.0 | person-profile strategy review — live test proved FullEnrich *searches* are FREE and return full profiles (title, seniority, linkedin_url, dated job history); Proxycurl shut down July 4 (LinkedIn lawsuit), SERP demoted to fallback | enrich-person-profile shipped (FullEnrich-search-first waterfall) + NEW brick signal-person (job change free / LinkedIn posts / company news) + Bright Data pro mode (`&pro=1` → `web_data_linkedin_*` tools) |
 | 0.4.1 | relance-devis-habitat person-profile run #1 — 7 free profiles via FullEnrich search; 6 SERP credits → 0 hits on domain-less artisans; "Gérant" labeled Manager by the provider; kill-flagged SOPREMA claimed-then-reverted; a contact row added mid-run | rung B opt-in on low-presence segments (no domain + tiny/artisan) · French legal titles → C-Level over provider labels · kill flags in memory/ exclude from scope pre-score · enrich bricks never create rows (receipt suggestions only) · one upfront paid-budget confirmation per run |
 | 0.4.2 | signal-person fixture run (Julia Levy, tech-startups) — the move relay made person-profile write her Doctrine title onto her Predictice-anchored row; the planted signal (9 months old) was presented like fresh news; paid passes thin on a quiet profile | move ≠ promotion: a company change sets `left_company=1` (row frozen, excluded from person-profile AND write-sequence scopes), only promotions relay `profile_status` · `freshness` on every signal (≤60 days = fresh/icebreaker, older = context; write-sequence enforces it) · NEW hiring pass via `web_data_linkedin_job_listings` — often the strongest intent signal |
+| 0.5.0 | hiring rework (GTM playbook review) — SERP-guessing "does X hire?" was the wrong altitude, and hiring is TWO motions, not one: checking tracked companies vs sourcing new ones | signal-person pass 3 v2: segment-aware multi-source sweep (France Travail/Indeed/HelloWork SERP for artisans-SMB, ATS-direct + LinkedIn Jobs for tech; no date operators; agencies/stage excluded; CNIL company-level rule) + NEW brick find-hiring-signal (pain-matrix sourcing: one GTM hypothesis per query, offer extraction to staging, /100 signal score, commit ≥70 with a ready outreach angle) |
+| 0.5.1 | first hiring field runs (Gironde) — Bright Data FULL outage (29/29 empty) absorbed by an improvised free-channel fallback at equal quality; 5-6 serial human gates per run made it painfully slow; ~135 interim offers filtered post-hoc; the morning's 8 signals rows missed `sig_key` | free-channel fallback + 1-credit health control promoted to doctrine (the doctrine is the engine, not the vendor) · ONE GO per run (matrix+budget+cut in a single confirmation; free passes never re-ask) · negative keywords in queries (interim brands) · `sig_key` added to find-hiring-signal's commit list (bug) + backfill · per-pass freshness (one pass's stamp never blocks another) · batched db-writer dispatches (per phase/batch, never per row) · source notes (France Travail keyword pages, LinkedIn post-ID dates) |
+| 0.5.2 | backfill receipt — the two hiring writers keyed `sig_key` with different URL conventions (normalized vs raw), a silent future-duplicate trap | canonical `sig_key` normalization written into BOTH skills (scheme/`www.` stripped, no trailing slash); the 8 backfilled keys re-normalized in base |
+| 0.6.0 | speed review — wall-clock went to LLM mechanical work (query generation, page fetching, card parsing) and serial human gates | `tools/jobs.py` shipped (hunt + check modes, stdlib-only: France Travail cards + detail microdata, HelloWork aria-labels, career-page probe, word-boundary agency filter ~40 brands + "recrute pour", prescore 65/100 with volume bonus); find-hiring-signal phase 1 and signal-person pass 3 now run the script FIRST, SERP/Bright Data demoted to escalation for ATS/LinkedIn lanes — hiring hunts cost ~0 credits and seconds on SMB/artisan ICPs (live-validated: both Gironde field runs reproduced) |
+| 0.7.0 | script-the-plumbing continues | `tools/news.py` shipped (Google News RSS: free, no key, dated+sourced items, offer-term hits, distress `warning` flag for the kill gate; live-validated — SOPREMA 5 articles/45 j dont "CA record", 123 vieux articles filtrés, artisans QUIET honnêtes); signal-person pass 4 now script-first, SERP demoted to tier-A escalation; implementation note added to the score block: ship it as `tools/score.py` (the pattern is proven ×3) |
+| 0.7.1 | free re-scan run #2 — the session still ran 0.6.0 (Rule 3 trap: opened pre-update; news.py untested); the re-scan downgraded 3 contacts carrying valid context signals; the AMB career-page signal duplicated (homepage vs deep page → two sig_keys) — both self-caught and hand-fixed by the run | career-page hiring signals key on the DOMAIN (one per company; board offers keep full URLs) · jobs.py career probe now prefers the deep page over the homepage · downgrade rule: `not_found` only when no valid signal rows exist, else re-scans close `done` |
+| 0.7.2 | merge with Rémi's main — both sides had shipped a different "0.6.0" (version collision on rebase) | post-merge bump to a version neither cache has ever seen (Rule 3: a stale "already at latest" would silently hide the merged half); Robin's 0.5.0→0.7.1 line and Rémi's work now live in the same tree |
 
 Full pipeline validated in the field at **0 credits** end to end:
 sourcing (FullEnrich free preview) → firmographics (official API) →
@@ -100,7 +110,7 @@ one verified decision-maker per company (registry + free searches).
 
 ### To build — Robin (data in)
 
-signal-person hiring pass v2 (France Travail API) · signal-sillage
+signal-sillage
 
 > Considered & rejected: **enrich-company** — a standalone "enrich a company"
 > brick would duplicate the generic `enrich` skill (any company column via
@@ -339,35 +349,83 @@ receipts only in the conversation.
 - Strategy: four announced passes, cheap first — job changes via FREE
   FullEnrich re-search (returned current employment vs stored columns;
   promotions count); recent posts via `web_data_linkedin_posts`
-  (per-record, cap 25/run, money gate §8); hiring via
-  `web_data_linkedin_job_listings` (per-record, cap 25 companies —
-  often the strongest intent signal of the four); company news via
-  SERP (last month, one query per company). A signal without a source
+  (per-record, cap 25/run, money gate §8); hiring via `tools/jobs.py
+  check` (0.6.0 — free trade sweep + name check + career-page probe,
+  agencies pre-flagged; Bright Data escalation for ATS/LinkedIn-only
+  companies, cap 25 — often the strongest intent signal of the four);
+  company news via `tools/news.py` (0.7.0 — Google News RSS, free,
+  last-month window, distress `warning` flag; LLM judges homonyms;
+  SERP escalation only for quiet tier-A accounts). A signal without a source
   URL/record does not exist; only FRESH (≤60 days) signals are
   icebreaker material. On-demand today; scheduled `claude -p` cadence
   next; real-time = cockpit V2. Prospect *comments* stay out of reach
   without a logged-in account — deliberately renounced (doctrine:
   never log in).
 
-### To build — Robin (data in)
+**find-hiring-signal** ✅ (0.5.0 — new brick: hiring as a sourcing engine)
+- IN: `context/offer.md` + `icp.md` (HARD gate — the pain matrix
+  derives from them) + Bright Data; confirmed `hiring_matrix`
+  persisted in `memory/state.json`, reused silently.
+- OUT: `companies` rows (`source='hiring-signal'`, verified domain,
+  `hiring_score` 0-100, `hiring_angle` ready for write-sequence) + one
+  `signals` row per company (`kind='hiring'`, freshness, evidence
+  URL); raw offers + rejects in `staging/hiring-<date>/`.
+- Strategy: you are not searching job ads — you are searching
+  companies that just revealed a business priority in public.
+  User-confirmed pain matrix (titles × tools × pains × geo; one GTM
+  hypothesis per query, never "startup jobs France") → batched SERP
+  over ATS-direct (greenhouse/lever/ashby/workable/teamtailor/WTTJ),
+  LinkedIn Jobs, Indeed, France Travail + HelloWork for SMB ICPs →
+  offers scraped and extracted to staging, filtered (≤60 days, real
+  employer, no agencies/stage, CNIL company-level only) → grouped by
+  company, signal score /100 (recency 20, category fit 25, tool 15,
+  pain wording 15, volume 15, size 10) → user confirms the cut
+  (default ≥70) → committed with the angle as contextual proof, never
+  "j'ai vu que vous recrutez". Future upgrade to evaluate: France
+  Travail official API + La Bonne Boîte (exhaustive per-SIRET
+  coverage, free key). 0.5.1 field patches: single GO per run,
+  1-credit health control + free-channel fallback, negative keywords,
+  `sig_key` fix, batched commits.
 
-**signal-person — hiring pass v2 (rework)**
-- Trigger (0.4.2 field test): detecting hiring through Google SERP is
-  the wrong altitude — date-filtered queries came back 9/9 empty,
-  undated ones are noise; and LinkedIn Jobs misses artisans entirely
-  (they post on France Travail / Indeed / HelloWork).
-- Strategy: official API first — the same doctrine that made
-  enrich-firmographics unblockable. France Travail "Offres d'emploi"
-  API (francetravail.io, free key): pull a company's live openings —
-  by SIRET if the endpoint allows it (we already store `siren` via
-  enrich-firmographics, column relay), else name+commune (exact param
-  to validate at build time). Rung 2: `web_data_linkedin_job_listings`
-  for bigger/tech companies only. SERP dropped from the pass. To
-  evaluate on the same platform: La Bonne Boîte API
-  (hiring-probability per establishment — a signal even when no offer
-  is posted).
-- One-time setup: a free France Travail API key, stored like the
-  Bright Data token.
+**tools/jobs.py** ✅ (0.6.0 — the deterministic hunt engine)
+- IN: hunt mode — the confirmed `hiring_matrix` JSON; check mode — a
+  companies batch (`company_id`, name, domain, location) +
+  `--keywords` trade terms swept ONCE for the whole batch (France
+  Travail matches employer names poorly; the trade sweep is what
+  finds them).
+- OUT (staging only — never touches bricks.db): `offers.jsonl`
+  (pre-extracted, prescore ≤ 65: recency/tools/pains/volume),
+  `rejected.jsonl` (agencies, stage, expired, anonymous — with
+  reasons, recoverable), `companies.jsonl` (grouped with volume
+  bonus, or per-company `hiring`/`quiet` verdicts), `summary.json`
+  (the receipt: counts, caps, errors, spend=0).
+- Strategy: firmo.py doctrine — deterministic script, no LLM in the
+  loop. Polite stdlib fetches (0.8 s rate, browser UA, one retry):
+  France Travail search cards + detail microdata (datePosted,
+  hiringOrganization, validThrough), HelloWork cards (aria-label
+  carries title/city/company/contract), career-page probe on known
+  domains (≤ 3 fetches); word-boundary agency filter (~40 interim
+  brands + the "recrute pour" formula). Live-validated on day one:
+  reproduced the manual Gironde hunt (104 raw → 34 kept, 24+ agencies
+  flagged, MORICEAU's double offer caught by the volume bonus) and
+  the afternoon hiring pass (AMB career page + MORICEAU via trade
+  sweep) — seconds, 0 credits. The skills call it FIRST; SERP/Bright
+  Data are the escalation for ATS/LinkedIn lanes.
+
+**tools/news.py** ✅ (0.7.0 — the company-news engine)
+- IN: a companies batch (`company_id`, name) + `--days` window +
+  optional `--terms` (offer vocabulary).
+- OUT (staging only): `news.jsonl` (dated items, outlet, URL,
+  `term_hits`, `name_in_title`, `warning` on distress vocabulary —
+  redressement/liquidation feed the kill gate, never an icebreaker),
+  per-company `news`/`quiet` verdicts, `summary.json`.
+- Strategy: Google News RSS (free, no key, FR edition), one fetch per
+  company, legal-form suffixes stripped from the query phrase. The
+  script filters by date and vocabulary mechanically; the LLM judges
+  relevance (homonyms). Live-validated: SOPREMA → 5 dated articles in
+  45 days ("CA record" caught by `croissance`), 123 older items
+  dropped, no-press artisans honestly QUIET. signal-person pass 4
+  calls it first; SERP only for quiet tier-A accounts.
 
 **find-company-people** (user-requested as `find-people-company`)
 - IN: `companies` rows already in the DB (`domain` ideally),
@@ -422,7 +480,12 @@ receipts only in the conversation.
 - Strategy: the agent writes the rules once (onboard), a deterministic
   pass applies them — same input, same score, explainable to a jury.
   Kill gate runs as early as columns allow (money gate's best friend);
-  scoring re-runs free after every enrichment wave.
+  scoring re-runs free after every enrichment wave. Implementation
+  note (0.7.0): ship the deterministic pass as `tools/score.py`
+  reading `scoring.yaml` — the firmo/jobs/news pattern, proven ×3:
+  script applies the rules, LLM only explains edge cases, db-writer
+  commits. The `signals` table (freshness, distress `warning`) is
+  scoring input too.
 
 **crm-import**
 - IN: a CRM credential/URL/export (HubSpot `pat-…`, Notion `ntn_…`,

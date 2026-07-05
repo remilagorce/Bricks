@@ -4,8 +4,8 @@
 |---|---|
 | family | signal (person level — twin of signal-sillage, account level) |
 | target | reads contacts, writes signals (+ freshness columns on contacts) |
-| method | four announced passes, cheap first: job change via FullEnrich re-search (free) → recent posts via `web_data_linkedin_posts` (per-record) → hiring via `web_data_linkedin_job_listings` (per-record) → company news via SERP |
-| cost | pass 1 free · passes 2-3 per-record (caps: 25 post lookups, 25 hiring lookups) · pass 4 ~1 credit per company query |
+| method | four announced passes, cheap first: job change via FullEnrich re-search (free) → recent posts via `web_data_linkedin_posts` (per-record) → hiring via `tools/jobs.py check` (free trade sweep + name check + career-page probe; Bright Data escalation for ATS/LinkedIn-only companies) → company news via `tools/news.py` (Google News RSS, free; SERP escalation for quiet tier-A accounts) |
+| cost | pass 1 free · pass 2 per-record (cap 25) · pass 3 free on script lanes, ~2-4 credits/company on escalation only (cap 25) · pass 4 free (RSS), ~1 credit/query on escalation only |
 
 ## IN
 
@@ -51,9 +51,18 @@
 ## Guardrails
 
 - Paid passes announced with exact volume BEFORE spending (money gate
-  §8); hard caps without explicit override: 25 post lookups, 25 hiring
-  lookups per run.
-- Append-only signals, deduped on `sig_key` — re-scans never duplicate.
+  §8); hard caps without explicit override: 25 post lookups, 25
+  companies swept for hiring per run.
+- Hiring pass: no date operators in queries (freshness read on the
+  offer page); recruitment agencies/ESN and stage/alternance excluded;
+  company-level data only — no candidate/recruiter personal data
+  (CNIL); 1-credit health control first — Bright Data empty → the
+  free web channel carries the pass, same discipline.
+- Append-only signals, deduped on `sig_key` — re-scans never duplicate;
+  career-page hiring evidence keys on the DOMAIN (one signal per
+  company), board offers on their full URL.
+- `not_found` only when no valid signal rows exist for the row; a
+  re-scan finding nothing new on a signaled row closes `done`.
 - Every scanned contact gets `signal_checked_at` stamped, found or not;
   7-day freshness window keeps re-runs cheap.
 - Never logs into LinkedIn; public records and indexed content only.

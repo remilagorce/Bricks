@@ -9,7 +9,7 @@ The dynamic sibling of enrich-person-profile: the profile is the photo,
 signals are the movie. Scans KNOWN contacts and writes dated,
 evidence-backed rows to a `signals` table: `job_change` (free, via
 FullEnrich), `new_post` (LinkedIn posts, per-record), `hiring`
-(LinkedIn job listings, per-record), `company_news` (SERP).
+(segment-aware multi-source job sweep), `company_news` (SERP).
 Account-level product signals (usage spikes, Sillage) belong to
 signal-sillage — this brick covers public signals around the tracked
 people and their companies. Contract in this directory's BRICK.md.
@@ -30,7 +30,11 @@ the score brick ships. FullEnrich (§4) gates pass 1 only.
 
 Rows enter scope when `signal_status='pending'` OR `signal_checked_at`
 is older than 7 days (the skill re-inits those to `pending`; the user
-can force a full re-scan). Claim `running` via `db-writer` (absolute db
+can force a full re-scan). The window applies PER PASS:
+`memory/state.json` logs which passes each scan ran, and a pass that
+never ran on a row is always due — one pass's stamp never blocks
+another (field-tested: a morning job-change scan must not mute an
+afternoon hiring sweep). Claim `running` via `db-writer` (absolute db
 path). Every scanned row gets `signal_checked_at` stamped, found or not.
 Signals are append-only, deduped on `sig_key` — re-runs never duplicate
 a signal already seen.
@@ -66,27 +70,62 @@ a signal already seen.
   URL. Tool absent from the tool list → pass unavailable; tell the user
   it ships with plugin ≥ 0.4.0 (update + restart), never emulate it by
   scraping profile pages (login wall).
-- **Pass 3 — hiring (Bright Data `web_data_linkedin_job_listings`, pro
-  tools, per-record cost)**: PAID — explicit confirmation first (§8):
-  one lookup per company of the in-scope contacts, hard cap 25
-  companies per run. A company actively hiring is often the strongest
-  intent signal of the four (growth, full order book, budget to
-  spend). Signal `hiring`: the open roles in one line ("hiring 2
-  poseurs + 1 conducteur de travaux"), `evidence_url` = the listing
-  URL, `date` = the posting date. Tool absent from the tool list →
-  pass unavailable; it ships with plugin ≥ 0.4.0 + Bright Data
-  connected.
-- **Pass 4 — company news (Bright Data `search_engine`, ~1 credit per
-  query)**: batched queries `"<company>" + news terms relevant to the
-  offer` (levée, acquisition, ouverture…), restricted to
-  the last month, one query per company of the in-scope contacts.
-  Signal `company_news` with the article URL. Announce query volume at
-  scale (§8).
+- **Pass 3 — hiring (script first — 0 credits for most rows)**: a
+  company actively hiring is often the strongest intent signal of the
+  four (growth, full order book, budget to spend). Run the engine:
+
+      python3 "${CLAUDE_PLUGIN_ROOT}/tools/jobs.py" check \
+        --companies <batch.json> --keywords "<trade terms from ICP>" \
+        --out <workspace>/staging/signals-<date>
+
+  one JSON row per company (`company_id`, name, domain, location).
+  The script sweeps France Travail by trade keyword ONCE for the
+  whole batch (FT matches employer names poorly — field-tested: that
+  sweep is what finds them), checks each company by name, probes
+  career pages on known domains, and returns per-company verdicts
+  (`hiring` / `quiet`) with dated, sourced offers — seconds,
+  0 credits, agencies pre-flagged. Escalate to Bright Data ONLY for
+  companies the script cannot see (tech/scaleup on ATS or LinkedIn
+  Jobs: ATS-direct SERP + `web_data_linkedin_job_listings`; budget
+  announced §8, cap 25 companies, 1-credit health control first —
+  outage → built-in web search carries the lane). NEVER date
+  operators in queries.
+  Every hit is VERIFIED by reading the offer page
+  (`scrape_as_markdown`): the employer must be OUR company —
+  recruitment agencies/ESN posting for unnamed clients are excluded,
+  stage/alternance excluded by default — and the posted date must be
+  readable. Signal `hiring`: open roles + what the offer reveals
+  (tools, pain wording — "recrute 2 poseurs, surcroît d'activité"),
+  `date` = posting date, `evidence_url` = the offer URL. Several
+  relevant offers ≤ 60 days → say so in the summary (volume = stronger
+  signal). Company-level data only — never store candidate or
+  recruiter personal data (CNIL).
+- **Pass 4 — company news (`tools/news.py`, free)**: run
+
+      python3 "${CLAUDE_PLUGIN_ROOT}/tools/news.py" \
+        --companies <batch.json> --out <workspace>/staging/news-<date>
+
+  Google News RSS — one fetch per company, 0 credits, last-month
+  window (`--days`): dated items with outlet, `term_hits` (offer
+  vocabulary, override with `--terms`) and a `warning` flag on
+  distress vocabulary (redressement, liquidation — kill-gate
+  material, NEVER an icebreaker). The script filters mechanically;
+  the LLM judges RELEVANCE — homonyms are the trap (`name_in_title`
+  helps, the call is judgment; an article about someone else's DUPIN
+  is not a signal). Signal `company_news` with the article URL. SERP
+  escalation only when RSS is quiet AND the account is tier A
+  (announced, §8).
 
 **Verification rule**: a signal without a source (FullEnrich record or
 URL) does not exist — never infer activity, never date-guess. All passes
 ran and nothing found → `signal_status='not_found'` (a result, not an
 error).
+
+**Downgrade rule**: `not_found` is only legal when the signals table
+holds NO valid row for that contact/company. A re-scan that finds
+nothing NEW on a row with existing signals closes `done` — the scan
+happened, the signals on file stand (field-tested: a free re-scan
+wrongly downgraded three contacts carrying valid context signals).
 
 **Signal age — the 60-day rule**: every signal carries its own `date`
 and a `freshness` verdict computed at detection: ≤ 60 days old =
@@ -107,11 +146,21 @@ humans), `kind` = `job_change` | `new_post` | `hiring` |
 (≤ 60 days) | `context`, `summary` (1-2 lines, anchored in the
 evidence), `evidence_url`, `source` = `fullenrich-search` |
 `linkedin-posts` | `linkedin-jobs` | `news-serp`, `sig_key` =
-`<kind>:<contact_id or company_id>:<url or new-company>`,
+`<kind>:<contact_id or company_id>:<url or new-company>` (URLs
+normalized — scheme and `www.` stripped, no trailing slash — the same
+convention as find-hiring-signal, so both hiring writers key one
+offer identically; EXCEPTION: `hiring` evidence from a company's OWN
+career page keys on the domain alone, `hiring:<company_id>:<domain>` —
+a career-page mention is one signal per company whichever page
+carries it, field-tested dup: homepage vs deep page made two keys for
+the same hiring; board offers keep their full offer URL — distinct
+offers are distinct signals),
 `status='new'`, `detected_at`. On the contact: `last_signal` (one
 short human line for the table view), `signal_status`,
 `signal_checked_at`; on a company change additionally `left_company=1`
-(pass 1).
+(pass 1). At volume, group writes in batches of 5-8 through staging
+(§6) — one `db-writer` dispatch per batch, never one per row: the
+per-row dispatch overhead is what makes runs feel slow.
 
 ## Volume mode
 
