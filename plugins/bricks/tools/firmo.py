@@ -141,8 +141,11 @@ def score(record, wanted_norm, hint_norm):
     return s
 
 
-def fetch(q):
-    query = urllib.parse.urlencode({"q": q, "page": 1, "per_page": 5})
+def fetch(q, extra=None):
+    params = {"q": q, "page": 1, "per_page": 5}
+    if extra:
+        params.update(extra)
+    query = urllib.parse.urlencode(params)
     request = urllib.request.Request(
         f"{API}?{query}", headers={"User-Agent": "bricks-firmographics"}
     )
@@ -152,6 +155,8 @@ def fetch(q):
 
 def lookup(name, hint="", siren=""):
     siren = re.sub(r"\D", "", str(siren or ""))
+    postal = re.search(r"\b(\d{5})\b", hint or "")
+    postal_filter = {"code_postal": postal.group(1)} if postal else None
     try:
         if len(siren) == 9:
             for record in fetch(siren):
@@ -160,10 +165,16 @@ def lookup(name, hint="", siren=""):
                     out["confidence"] = "high"
                     return out
             return {"confidence": "none", "error": "siren not found"}
-        results = fetch(name)
+        results = fetch(name, postal_filter)
+        if not results and postal_filter:
+            time.sleep(RATE_SLEEP)
+            results = fetch(name)
         if not results and simplified(name) not in ("", normalize(name)):
             time.sleep(RATE_SLEEP)
-            results = fetch(simplified(name))
+            results = fetch(simplified(name), postal_filter)
+            if not results and postal_filter:
+                time.sleep(RATE_SLEEP)
+                results = fetch(simplified(name))
     except Exception as e:
         return {"confidence": "none", "error": f"api error: {e}"}
 
