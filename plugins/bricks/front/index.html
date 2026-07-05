@@ -814,6 +814,7 @@ function CampaignSettingsPage({ onBack, onSave }) {
         </div>
       <//>
 
+      ${false && html`
       <${Section} icon="📤" tone="orange" title="Mail d'envoi" open=${open.mail} onToggle=${() => toggleSection("mail")}
         summary=${html`${emails.length} e-mail${emails.length === 1 ? "" : "s"} enregistré${emails.length === 1 ? "" : "s"}<br />E-mail sélectionné : ${selectedEmail || "(aucun)"}`}>
         <div class="mail-center">
@@ -839,7 +840,7 @@ function CampaignSettingsPage({ onBack, onSave }) {
               </button>`)}
           </div>
         </div>
-      <//>
+      <//>`}
 
       <${Section} icon="👥" tone="yellow" title="Liste de contacts" open=${open.contacts} onToggle=${() => toggleSection("contacts")}
         summary="Ajouter vos listes et vos contacts dans cette section, ils seront contactés ensuite avec les paramètres de votre campagne">
