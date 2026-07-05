@@ -22,15 +22,21 @@ contact's persona from their `role`.
 
 1. **Work list** — ask `db-writer`: "select contacts where
    email_status='done' AND sequence_status is pending (create the column on
-   first use) AND status != 'disqualified', limit 20", then "select the
+   first use) AND status != 'disqualified' AND left_company is not set,
+   limit 20" (a departed contact must never receive a sequence about
+   their old company — signal-person freezes those rows), then "select the
    companies rows for these company_ids" (pitch, language, and any enriched
    columns worth an angle: hiring, news…).
 2. **Claim** — batches of 5 contacts; `db-writer`: "set
    sequence_status='running' for these ids".
 3. **Write, per contact** — three emails:
    - step 1 (send_day 0): icebreaker anchored in THEIR reality — company
-     pitch or a fresher enriched signal; ONE outcome from the offer; one
-     clear, low-friction ask. ≤ 120 words.
+     pitch, an enriched column, or a `signals` row. Signals rule: only
+     `freshness='fresh'` signals (≤ 60 days — re-check `date` at write
+     time) may be treated as news ("congrats on…", "saw you're
+     hiring…"); `context` signals are background, never congratulated.
+     ONE outcome from the offer; one clear, low-friction ask.
+     ≤ 120 words.
    - step 2 (send_day 3): follow-up with a proof point from `offer.md`
      (number, client story) — a new angle, never "just bumping this".
      ≤ 120 words.

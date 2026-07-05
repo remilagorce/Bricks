@@ -19,10 +19,13 @@
 
 ## OUT
 
-- `contacts` rows: `company_id`, `full_name`, `role` (actual title),
+- `contacts` rows: `company_id` + `company_name` (denormalized for
+  human-readable tables), `full_name`, `role` (actual title),
   `role_type` = `decision-maker` | `champion` (ONE per company, chosen
   by the plan — never both), `linkedin_url` when available, `source` =
   `registry` | `fullenrich-search` | `linkedin-serp` | `team-page`.
+- Kill-rule-flagged companies are excluded from scope, their
+  `committee_status` left `pending` — no status values outside §5.
 - `companies.committee_status` → `done` | `not_found` | `failed`.
 - `memory/state.json.targeting_plan` — the confirmed doctrine, reused on
   re-runs.

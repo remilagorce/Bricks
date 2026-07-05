@@ -10,8 +10,13 @@
 ## IN
 
 - `contacts`: `email_status='done'` AND `sequence_status` pending AND
-  `status != 'disqualified'`; their `role`, `full_name`.
-- Parent `companies` rows: `pitch`, `language`, any signal columns.
+  `status != 'disqualified'` AND no `left_company` flag (a departed
+  contact never gets a sequence about their old company); their
+  `role`, `full_name`.
+- Parent `companies` rows: `pitch`, `language`, any signal columns —
+  plus `signals` rows: only `freshness='fresh'` (≤ 60 days, `date`
+  re-checked at write time) may be used as news-style icebreakers;
+  `context` signals are background only.
 - `context/offer.md` — REQUIRED (hard gate: refuses on TODO).
 - `context/personas/*.md` — persona picked from the contact's role.
 

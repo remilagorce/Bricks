@@ -41,7 +41,10 @@ Read `context/offer.md`, `context/icp.md` (Buying roles section) and
 
 Present the plan in 5-6 lines, get explicit confirmation, write it to
 `memory/state.json` (`targeting_plan`) and one line in `NOTES.md`.
-Re-runs reuse it silently; re-ask only if context/ changed.
+Re-runs reuse it silently; re-ask only if context/ changed. One
+exception: when the user already dictated the doctrine verbatim in
+`context/icp.md` ("Décideur type : le gérant"), restate the plan and
+proceed without blocking — their context IS the confirmation.
 
 ## Phase 1 — The waterfall, per company (cheap first, verified always)
 
@@ -71,12 +74,18 @@ rule from the plan, else `committee_status='not_found'`. NEVER invent a
 person, never write an unverified one.
 
 **Write immediately** per company via `db-writer`: a `contacts` row —
-`company_id`, `full_name`, `role` (actual title), `role_type`
-(`decision-maker` | `champion`), `linkedin_url` (when rung C/B gives it),
-`source` (`registry` | `fullenrich-search` | `linkedin-serp` |
-`team-page`), `status='new'` — then `committee_status='done'`. One
-contact per company (the plan's type), duplicates checked on
-(company_id + full_name).
+`company_id` AND `company_name` (denormalized on purpose: the table is
+read by humans, a bare id is unreadable in the front), `full_name`,
+`role` (actual title), `role_type` (`decision-maker` | `champion`),
+`linkedin_url` (when rung C/B gives it), `source` (`registry` |
+`fullenrich-search` | `linkedin-serp` | `team-page`), `status='new'` —
+then `committee_status='done'`. One contact per company (the plan's
+type), duplicates checked on (company_id + full_name).
+
+**Kill-rule rows**: companies flagged by a kill rule are EXCLUDED FROM
+SCOPE (skip them in the selection), their `committee_status` stays
+`pending` — never invent status values outside the shared vocabulary
+(§5); disqualifying is the score skill's (or the user's) call.
 
 ## Volume mode
 
