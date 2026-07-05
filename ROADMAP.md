@@ -205,20 +205,69 @@ issue per brick, assign = claim) · demo script.
   site + public LinkedIn estimate, flagged. Cheap columns → run early,
   feeds the kill gate AND enrich-buying-committee.
 
-**enrich-buying-committee** ✅ (moved to shipped)
+**enrich-buying-committee** ✅ — full functioning
+
 - IN: firmographics-enriched companies (`employees`, `executives`,
-  `parent_company`, `company_category`) + ICP buying roles + personas.
-- OUT: ONE verified contact per company — `role_type` champion OR
-  decision-maker (chosen by strategy, never both), title, linkedin_url,
-  source; `committee_status` on companies; `targeting_plan` persisted.
-- Strategy: Phase 0 — a user-confirmed targeting plan derived from ICP +
-  offer (small co → decision-maker; large co + expensive offer →
-  champion first; title patterns per type; fallback rule). Phase 1 —
-  cost-ordered waterfall per company, stop at first verified hit:
-  registry relay (free) → FullEnrich people search (free) → LinkedIn via
-  SERP snippets (~1 credit, never logged-in) → team page scrape.
-  Verification everywhere; not_found is honest; group-owned companies
-  skip the registry rung.
+  `parent_company`, `company_category`, `committee_status='pending'`) +
+  `context/offer.md` + `context/icp.md` (Buying roles) + `personas/`.
+- OUT: ONE verified contact per company in `contacts` (`full_name`,
+  `role` = actual title, `role_type` = `decision-maker` | `champion`,
+  `linkedin_url`, `source` = which rung found it), `committee_status` →
+  `done | not_found | failed`, `targeting_plan` persisted in
+  `memory/state.json`.
+
+*Phase 0 — the targeting doctrine (once per workspace, user-confirmed).*
+Derived from offer + ICP + personas, presented in 5-6 lines, confirmed
+by the user BEFORE any hunting, then persisted and reused silently on
+re-runs (re-asked only if context/ changes):
+
+| Company size | Target type | Why |
+|---|---|---|
+| ≲ 20 employees | decision-maker (founder/gérant/CEO) | no real champion exists in a 10-person shop — aim at the nerve |
+| mid-size | decision-maker of the buying function | title patterns from the ICP (head of purchasing, head of sales…) |
+| large + expensive/complex offer | CHAMPION first | the operational believer sells internally; personas say who |
+
+One target type per company — never both. The plan also fixes the title
+patterns per type (in the company's language) and the fallback rule:
+`none` (strict, default) or `other_type` (take the other role, labeled).
+
+*Phase 1 — the waterfall (per company, cheapest first, stop at first
+VERIFIED hit).*
+
+| Rung | Source | Cost | Skipped when |
+|---|---|---|---|
+| A | registry relay — the human in `executives` | free, instant | target ≠ decision-maker, company not small, or officer is a company (`parent_company` set → group noted) |
+| B | FullEnrich people search (title patterns + domain) | free — searches cost no credits | FullEnrich not connected |
+| C | LinkedIn via Bright Data SERP — `site:linkedin.com/in "<title>" "<company>"`, indexed snippets only, never logged in | ~1 credit, max 2 queries | Bright Data not connected |
+| D | team/about page scrape | ~1 credit | — |
+
+Verification rule at every rung: name + role + company must cohere IN
+THE SOURCE ITSELF; ambiguity → next rung; nothing after D → fallback
+rule, else `not_found`. Never an invented or unverified person. Writes
+happen immediately per company via db-writer; dedup on
+(company_id + full_name). Volume mode (>10 companies): subagents run
+rungs B-D in parallel batches → staging JSONL → main thread verifies →
+db-writer commits; SERP credits announced first (§8).
+
+*Test protocol (validated fields on the tech-startups workspace):*
+0. `relance enrich-firmographics` first if the table predates the
+   contract columns.
+1. "trouve les bons contacts pour mes entreprises" → the PLAN must be
+   presented and await confirmation (hunting before OK = fail).
+2. Rung A: ~6 small companies → instant free contacts from the registry
+   (`source=registry`, `role_type=decision-maker`).
+3. The hard case (Predictice): president is a holding (FORSETI) →
+   registry skipped WITH the group noted → human CEO found via B/C with
+   `linkedin_url` and announced credit.
+4. Champion path: add a 100+ employee company (e.g. doctrine.fr) → plan
+   routes to `role_type=champion` with an operational title.
+5. Negative: a fictitious company → cascade exhausted →
+   `not_found`, zero invention (the refusal IS the success).
+6. Idempotence: re-run → done rows untouched, plan reused without
+   re-asking.
+Success checklist: one contact per company · role_type matches the plan
+· every contact traced to its rung · credits announced before spending ·
+receipts only in the conversation.
 
 ### To build — Robin (data in)
 
