@@ -108,6 +108,7 @@ def shape(record):
     out = {
         "siren": record.get("siren"),
         "legal_name": record.get("nom_complet"),
+        "company_category": record.get("categorie_entreprise"),
         "naf": record.get("activite_principale"),
         "industry": naf_section(record.get("activite_principale")),
         "employees": EFFECTIF.get(code),

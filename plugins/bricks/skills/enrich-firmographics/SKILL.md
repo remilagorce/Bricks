@@ -38,12 +38,20 @@ later pass — say so in the receipt.
    simplified-name retry (legal suffixes stripped) runs automatically
    before declaring `none`.
 3. **Commit pass 1** — hand `db-writer` the `high` results in one batch:
-   `employees`, `industry`, `naf`, `siren`, `city`, `executives`
-   (JSON string), `firmo_status='done'` — plus `parent_company` when
-   present: it means the legal representative is a COMPANY (holding /
-   group), a strong "not independent" signal. Count these in the receipt
-   as kill-rule candidates when the ICP wants independents. Keep the
-   `ambiguous` and `none` lists for the next passes.
+   `employees`, `industry`, `naf`, `siren`, `city`, `company_category`,
+   `executives` (JSON string), `firmo_status='done'` — plus
+   `parent_company` when present: the legal representative is a COMPANY
+   (holding / group), a strong "not independent" signal.
+   **Group detection, two complementary signals** (flag in the receipt as
+   kill-rule candidates when the ICP wants independents; never disqualify
+   without user confirmation):
+   - `parent_company` set → directly controlled (e.g. président = a
+     holding);
+   - `company_category` is GE or ETI while local `employees` is small →
+     INSEE computes the category at GROUP level: a "10-19 employees GE"
+     is a subsidiary (e.g. traqfood → Mérieux NutriSciences). Confirm the
+     parent with a quick web check before flagging by name.
+   Keep the `ambiguous` and `none` lists for the next passes.
 4. **Pass 2 — legal pages via Bright Data (~1 credit/row)** — for each
    `ambiguous` AND each French-looking `none` row (trade names are often
    not indexed by the registry — the legal name hides behind the brand):

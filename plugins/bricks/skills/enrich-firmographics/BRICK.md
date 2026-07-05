@@ -23,6 +23,9 @@
   corporate officers).
 - `parent_company` when the legal representative is a company — the
   "group-owned, not independent" signal, receipt-flagged for kill rules.
+- `company_category` (INSEE: PME | ETI | GE, computed at GROUP level) —
+  GE/ETI with a small local headcount = subsidiary signal, even when the
+  registry lists no corporate officer.
 - `firmo_status` → `done` | `not_found` | `failed`;
   `firmo_source='estimate'` marks pass-3 grade data.
 - Rows already carrying a `siren` are re-looked-up exactly (no matching
