@@ -72,12 +72,12 @@ next week automatically joins existing motions.
 | CONVENTIONS §8 money gate + §9 BRICK contracts | Robin | ✅ shipped |
 | workspace / interface / find / enrich / transform / scan-mentions | Rémi | ✅ shipped (find + enrich patched after test #1) |
 | find-directory-scrape / find-lookalike / write-sequence / playbook-lookalike | Robin | ✅ shipped |
+| enrich-firmographics (+ tools/firmo.py, official gov API) | Robin | ✅ shipped |
 | Bright Data + FullEnrich MCP wiring | Robin | ✅ shipped, both Connected |
 
 ### To build — Robin (data in)
 
-enrich-firmographics · enrich-buying-committee · enrich-person-profile ·
-signal-sillage
+enrich-buying-committee · enrich-person-profile · signal-sillage
 
 ### To build — Rémi (data out)
 
@@ -188,17 +188,23 @@ issue per brick, assign = claim) · demo script.
   discriminating column(s) only, cheapest first, and keep the matches.
   Two human checkpoints; resumable at every phase.
 
-### To build — Robin (data in)
+### Shipped since — Robin
 
-**enrich-firmographics**
-- IN: `companies.domain`, `firmo_status='pending'`.
-- OUT: `employees`, `industry`, `country`, `siren`, `executives` columns.
-- Strategy: the French shortcut — fetch `/mentions-legales` (legally
-  mandatory) → extract SIREN → Pappers API (script-grade call, free tier)
-  returns headcount, NAF code, and the executives for free. Non-FR
-  companies: agent estimation from site + LinkedIn, flagged as estimate.
-  Cheap column → run it early, it feeds the kill gate AND
-  enrich-buying-committee.
+**enrich-firmographics** ✅
+- IN: `companies.name` (+ optional city/postal/domain hints),
+  `firmo_status='pending'`.
+- OUT: `employees`, `industry`, `naf`, `siren`, `city`, `executives`
+  columns (+ `firmo_source='estimate'` for pass-3 grade data).
+- Strategy: pass 1 — ONE batched call to `tools/firmo.py` hitting the
+  official French government API (recherche-entreprises.api.gouv.fr):
+  free, no key, self rate-limited, impossible to block — resolves most
+  rows in seconds, executives included. Pass 2 — ambiguous names only:
+  Bright Data reads the site's legal page (SIREN is legally published
+  there) to pick the right record, ~1 credit/row. Pass 3 — non-French:
+  site + public LinkedIn estimate, flagged. Cheap columns → run early,
+  feeds the kill gate AND enrich-buying-committee.
+
+### To build — Robin (data in)
 
 **enrich-buying-committee**
 - IN: enriched company row + `context/icp.md` buying roles + personas.

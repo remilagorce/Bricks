@@ -1,0 +1,41 @@
+# Brick contract: enrich-firmographics
+
+| Field | Value |
+|---|---|
+| family | enrich (company level) |
+| target | companies |
+| method | script (`tools/firmo.py` → official French government API) + Bright Data for disambiguation/estimates; writes via `db-writer` |
+| cost | free (pass 1, unlimited) · ~1 Bright Data credit per ambiguous/foreign row (passes 2-3) |
+
+## IN
+
+- `companies.name` (required), `firmo_status='pending'`,
+  `status != 'disqualified'`.
+- Optional locality hints sharpen matching: `city`, `postal`, `domain`.
+- Optional: `mcp__brightdata__*` for passes 2-3 (without it those rows
+  stay pending).
+
+## OUT
+
+- `employees` (range string, e.g. "50-99"), `industry` (NAF section
+  label), `naf` (code), `siren`, `city`, `executives` (JSON list of
+  {name, role}, statutory auditors excluded).
+- `firmo_status` → `done` | `not_found` | `failed`;
+  `firmo_source='estimate'` marks pass-3 grade data.
+
+## Errors
+
+- API unreachable → `failed` (retryable), never switch to guessing.
+- Ambiguous with no SIREN on the legal page → `not_found`.
+- Estimates never cover `siren`/`executives` — official identifiers are
+  real or absent.
+
+## Guardrails
+
+- Pass 1 is one batched script call — fast, free, unblockable (official
+  public API, self rate-limited under 7 req/s). Bright Data is surgical
+  (money gate §8 applies at volume).
+- Kill-rule matches (size/country) are FLAGGED in the receipt, never
+  silently disqualified — that is the score skill's job.
+- Idempotent re-runs via `firmo_status`; subagent findings go through
+  staging, `db-writer` commits.
