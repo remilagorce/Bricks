@@ -1,14 +1,16 @@
 ---
 name: create-landing-page
-description: Génère une landing page HTML premium à partir du contexte workspace (offre, ICP, personas) — sans interview. "Crée une landing page", "landing pour mon offre", "page produit", "one-pager web".
+description: Génère une landing page HTML premium à partir du contexte workspace (offre, ICP, personas) — sans interview — puis la déploie sur Vercel (via GitHub) sur un domaine générique. "Crée une landing page", "landing pour mon offre", "page produit", "one-pager web", "déploie ma landing".
 ---
 
 # Create landing page
 
 Produces a single self-contained HTML landing page from the current
-workspace's GTM context. Positioning, audience, tone, and proof points
-come from `context/` — this brick assembles the brief, then executes
-[landing.md](landing.md) (embedded HTML generator, MIT/alirezarezvani).
+workspace's GTM context, then ships it live. Positioning, audience, tone,
+and proof points come from `context/` — this brick assembles the brief,
+executes [landing.md](landing.md) (embedded HTML generator,
+MIT/alirezarezvani), and finishes by deploying the page to a generic
+Vercel domain via GitHub, following [deploy.md](deploy.md).
 Never writes to `bricks.db`.
 
 ## Before anything: resolve the workspace and read the context
@@ -89,14 +91,39 @@ Tone: <professional|playful|authoritative|minimal>
 Hero headline / subtext / features / CTA / proof
 ```
 
+## Deploy — final step, read deploy.md
+
+Once the HTML validates, deployment is the last step of every run — the
+page is not "done" until it is live on a generic Vercel domain.
+
+1. **Read** `${CLAUDE_PLUGIN_ROOT}/skills/create-landing-page/deploy.md`
+   in full — it is the deployment engine (preflight → deploy → receipt),
+   all driven by `scripts/deploy_landing.py`. Never run raw
+   `git`/`gh`/`vercel` commands yourself.
+2. **Preflight** (`--check`) verifies git, the GitHub CLI, the Vercel CLI
+   and their credentials. If anything is missing, ask the user for
+   exactly what the check names — install command, `! gh auth login`,
+   `! vercel login`, or a Vercel token — then re-check. This is the one
+   place where asking is expected: never deploy with fabricated or
+   assumed credentials.
+3. **Deploy** (`--deploy`) pushes the page to a (private by default)
+   GitHub repo named `landing-<slug>`, then deploys it to Vercel
+   production. The generic domain is `https://landing-<slug>.vercel.app`.
+
+Skip deployment only if the user explicitly says not to deploy (e.g.
+"juste le fichier HTML") — then note in the receipt that the page is
+local-only and can be deployed later by re-invoking this skill.
+
 ## Receipt
 
-Report in 4–6 lines: output path, audience + tone chosen, which context
-fields drove the copy, validator result. Do not paste the full HTML.
-Offer to open in browser or tweak one section.
+Report in 4–7 lines: **production URL first**, then output path, GitHub
+repo, audience + tone chosen, which context fields drove the copy,
+validator result. Do not paste the full HTML or deploy logs.
+Offer to tweak one section (a re-run redeploys the same URL).
 
 ## Close the run
 
-Append one line to `memory/NOTES.md` (landing slug, audience, tone).
-Update `memory/state.json` with `{ "lastLandingPage": "<path>" }` if the
-file exists; create minimal state otherwise.
+Append one line to `memory/NOTES.md` (landing slug, audience, tone,
+production URL). Update `memory/state.json` with
+`{ "lastLandingPage": "<path>", "lastLandingDeploy": "<production URL>" }`
+if the file exists; create minimal state otherwise.
