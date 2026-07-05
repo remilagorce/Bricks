@@ -74,12 +74,14 @@ next week automatically joins existing motions.
 | find-directory-scrape / find-lookalike / write-sequence / playbook-lookalike | Robin | ✅ shipped |
 | enrich-firmographics (+ tools/firmo.py, official gov API) | Robin | ✅ shipped, field-tested ×2 |
 | enrich-buying-committee (targeting plan + waterfall) | Robin | ✅ shipped, field-tested |
+| enrich-person-profile (identity waterfall, FullEnrich-search first) | Robin | ✅ shipped, field-tested ×1 (0.4.1 patches) |
+| signal-person (job change / hiring / posts / news scan) | Robin | ✅ shipped, field-tested ×1 (0.4.2 patches) |
 | Bright Data + FullEnrich MCP wiring | Robin | ✅ shipped, both Connected |
 
 ### Field-test log — the loop that improves the product
 
 Every fix below came from a real desktop test session. Plugin version at
-head: **0.3.1**.
+head: **0.4.2**.
 
 | Version | Trigger | What changed |
 |---|---|---|
@@ -88,6 +90,9 @@ head: **0.3.1**.
 | 0.2.2 | tech-startups run #2 | `company_category` (INSEE, group-level) — second subsidiary signal (caught traqfood → Mérieux) |
 | 0.3.0 | — | enrich-buying-committee shipped (doctrine + verified waterfall) |
 | 0.3.1 | relance-devis-habitat run (couvreurs) | `company_name` on contacts (readable table), kill-rule scope pattern (no invented statuses), postal-code API filter (resolved 4 trade-name artisans; the historic "Merci" ambiguity now high-confidence) |
+| 0.4.0 | person-profile strategy review — live test proved FullEnrich *searches* are FREE and return full profiles (title, seniority, linkedin_url, dated job history); Proxycurl shut down July 4 (LinkedIn lawsuit), SERP demoted to fallback | enrich-person-profile shipped (FullEnrich-search-first waterfall) + NEW brick signal-person (job change free / LinkedIn posts / company news) + Bright Data pro mode (`&pro=1` → `web_data_linkedin_*` tools) |
+| 0.4.1 | relance-devis-habitat person-profile run #1 — 7 free profiles via FullEnrich search; 6 SERP credits → 0 hits on domain-less artisans; "Gérant" labeled Manager by the provider; kill-flagged SOPREMA claimed-then-reverted; a contact row added mid-run | rung B opt-in on low-presence segments (no domain + tiny/artisan) · French legal titles → C-Level over provider labels · kill flags in memory/ exclude from scope pre-score · enrich bricks never create rows (receipt suggestions only) · one upfront paid-budget confirmation per run |
+| 0.4.2 | signal-person fixture run (Julia Levy, tech-startups) — the move relay made person-profile write her Doctrine title onto her Predictice-anchored row; the planted signal (9 months old) was presented like fresh news; paid passes thin on a quiet profile | move ≠ promotion: a company change sets `left_company=1` (row frozen, excluded from person-profile AND write-sequence scopes), only promotions relay `profile_status` · `freshness` on every signal (≤60 days = fresh/icebreaker, older = context; write-sequence enforces it) · NEW hiring pass via `web_data_linkedin_job_listings` — often the strongest intent signal |
 
 Full pipeline validated in the field at **0 credits** end to end:
 sourcing (FullEnrich free preview) → firmographics (official API) →
@@ -95,7 +100,7 @@ one verified decision-maker per company (registry + free searches).
 
 ### To build — Robin (data in)
 
-enrich-person-profile · signal-sillage
+signal-person hiring pass v2 (France Travail API) · signal-sillage
 
 ### To build — Rémi (data out)
 
@@ -286,15 +291,77 @@ Success checklist: one contact per company · role_type matches the plan
 · every contact traced to its rung · credits announced before spending ·
 receipts only in the conversation.
 
+**enrich-person-profile** ✅ (0.4.0 — strategy revised after live tests)
+- IN: `contacts` with `full_name` + a resolvable company (name/domain
+  hints; an existing `linkedin_url` upgrades the lookup),
+  `profile_status='pending'`.
+- OUT: `role`, `seniority`, `linkedin_url`, `profile_source`;
+  `profile_status` → `done | not_found | failed`.
+- Strategy: verified waterfall, cheap first. Rung A — FullEnrich people
+  search: FREE (0 credits, live-verified) and returns title, seniority,
+  linkedin_url and dated job history — the "FullEnrich = only
+  email/phone" belief was wrong: that is the paid *enrich* side, not
+  *search*. Rung B — LinkedIn SERP via Bright Data, indexed snippets
+  only (~1 credit; profile pages sit behind the login wall — confirmed,
+  never scraped). Rung C — team/press pages. Optional structured rung:
+  `web_data_linkedin_person_profile` (pro mode) when the URL is known
+  but the title still missing. Name + role + company must cohere in the
+  source; `not_found` over guessing. Completes imported/CRM contacts
+  that enrich-buying-committee never touched. 0.4.1 field patches:
+  rung B opt-in on low-presence segments (no domain + tiny/artisan),
+  French legal titles → C-Level over provider labels, kill flags in
+  memory/ excluded from scope, receipt suggestions instead of row
+  creation, one upfront paid-budget confirmation per run. 0.4.2:
+  `left_company=1` rows out of scope; the verification rule has
+  primacy over any relay — a title observed at another company than
+  the row's is never written.
+
+**signal-person** ✅ (0.4.0 — new brick, person-level twin of signal-sillage)
+- IN: contacts with `linkedin_url` (+ a resolvable company for
+  hiring/news); scope = tier A/B once score exists, else
+  user-confirmed; re-scan window: `signal_status='pending'` or
+  `signal_checked_at` > 7 days.
+- OUT: `signals` rows (`kind` = `job_change | new_post | hiring |
+  company_news`, summary + `evidence_url` + date + `freshness` =
+  `fresh` ≤60d | `context`, append-only, dedup on `sig_key`) +
+  `contacts.last_signal` / `signal_status` / `signal_checked_at`. A
+  PROMOTION resets the contact's `profile_status='pending'` (bus relay
+  to enrich-person-profile); a company CHANGE sets `left_company=1`
+  instead — row frozen, excluded from person-profile and
+  write-sequence scopes, following the person is the user's call
+  (0.4.2, field-tested on the Julia Levy fixture).
+- Strategy: four announced passes, cheap first — job changes via FREE
+  FullEnrich re-search (returned current employment vs stored columns;
+  promotions count); recent posts via `web_data_linkedin_posts`
+  (per-record, cap 25/run, money gate §8); hiring via
+  `web_data_linkedin_job_listings` (per-record, cap 25 companies —
+  often the strongest intent signal of the four); company news via
+  SERP (last month, one query per company). A signal without a source
+  URL/record does not exist; only FRESH (≤60 days) signals are
+  icebreaker material. On-demand today; scheduled `claude -p` cadence
+  next; real-time = cockpit V2. Prospect *comments* stay out of reach
+  without a logged-in account — deliberately renounced (doctrine:
+  never log in).
+
 ### To build — Robin (data in)
 
-**enrich-person-profile**
-- IN: `contacts` with full_name + company, `profile_status='pending'`.
-- OUT: `role`, `seniority`, `linkedin_url` columns.
-- Strategy: public SERP only (`site:linkedin.com/in "name" "company"`) —
-  read the indexed snippet, never log into LinkedIn (ToS + burned
-  accounts). Complement with team pages / press bios. `not_found` is an
-  acceptable answer; never guess.
+**signal-person — hiring pass v2 (rework)**
+- Trigger (0.4.2 field test): detecting hiring through Google SERP is
+  the wrong altitude — date-filtered queries came back 9/9 empty,
+  undated ones are noise; and LinkedIn Jobs misses artisans entirely
+  (they post on France Travail / Indeed / HelloWork).
+- Strategy: official API first — the same doctrine that made
+  enrich-firmographics unblockable. France Travail "Offres d'emploi"
+  API (francetravail.io, free key): pull a company's live openings —
+  by SIRET if the endpoint allows it (we already store `siren` via
+  enrich-firmographics, column relay), else name+commune (exact param
+  to validate at build time). Rung 2: `web_data_linkedin_job_listings`
+  for bigger/tech companies only. SERP dropped from the pass. To
+  evaluate on the same platform: La Bonne Boîte API
+  (hiring-probability per establishment — a signal even when no offer
+  is posted).
+- One-time setup: a free France Travail API key, stored like the
+  Bright Data token.
 
 **signal-sillage**
 - IN: qualified accounts (tier A/B once scoring exists).
@@ -302,7 +369,9 @@ receipts only in the conversation.
 - Strategy: step zero is the access spike (account, API key, docs). Then
   `sync` pushes the account list; `ingest` polls on demand or via a cron
   `claude -p` run (real-time webhook = cockpit, V2). Demo plan B: simulated
-  signals in fixtures, clearly labeled.
+  signals in fixtures, clearly labeled. Person-level LinkedIn signals
+  are already covered by signal-person (0.4.0) — this brick stays
+  account-level.
 
 ### To build — Rémi (data out)
 
@@ -364,7 +433,8 @@ receipts only in the conversation.
 2. **Score (kill gate + icp-fit) — THE next brick.** Kill rules are
    currently flagged everywhere but enforced nowhere; this brick turns
    them into the early-stop demo moment ("it stops spending on its
-   own") and produces the tiers that prioritize emails and sequences.
+   own") and produces the tiers that prioritize emails, sequences and
+   signal-person's paid passes.
    Rémi's per the split — Robin takes it if Rémi is still under water.
    **Onboard** (Rémi) upgrades the context-in-a-prompt into the guided
    interview.
