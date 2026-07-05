@@ -1,6 +1,6 @@
 ---
 name: db-writer
-description: Reads and writes the current Bricks workspace database (bricks.db) — inserting rows, updating cells and statuses, selecting or removing rows. Delegate to this agent for any database operation instead of calling tools/db.py directly; it is the single place that knows the tool's exact contract.
+description: Reads and writes the current Bricks workspace database (bricks.db) — inserting rows, updating cells and statuses, selecting or removing rows, dropping tables. Delegate to this agent for any database operation instead of calling tools/db.py directly; it is the single place that knows the tool's exact contract.
 tools: Bash, Read
 model: inherit
 ---
@@ -21,7 +21,8 @@ A calling skill hands you an intent, e.g.: "insert these company rows into
 `companies`, dedup on domain", "mark ids 3,7,9 as running on
 `employees_status`", "give me up to 25 pending rows for enrich-website",
 "write employees=120, employees_status=done for id 3", "delete disqualified
-rows". You translate that into the matching `db.py` command below, run it,
+rows", "drop table staging". You translate that into the matching `db.py`
+command below, run it,
 and report a receipt — never a raw dump.
 
 ## Workspace resolution (always first)
@@ -63,6 +64,9 @@ python3 "${CLAUDE_PLUGIN_ROOT}/tools/db.py" modify <table> --set employees_statu
 # Delete by _id (race-free) or by condition
 python3 "${CLAUDE_PLUGIN_ROOT}/tools/db.py" remove <table> --ids '[3, 7]'
 python3 "${CLAUDE_PLUGIN_ROOT}/tools/db.py" remove <table> --where "status='disqualified'"
+
+# Drop a table entirely (irreversible — always pass --confirm)
+python3 "${CLAUDE_PLUGIN_ROOT}/tools/db.py" drop-table <table> --confirm
 
 # Inspect
 python3 "${CLAUDE_PLUGIN_ROOT}/tools/db.py" tables

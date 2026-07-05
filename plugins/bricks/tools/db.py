@@ -33,6 +33,8 @@ CLI (JSON on stdout; on error JSON on stderr + exit 1):
     python3 db.py modify  <table> --set website_status=running --where "website_status='pending'"
     python3 db.py remove  <table> --ids '[3, 7]'
     python3 db.py remove  <table> --where "status='disqualified'"
+    python3 db.py drop-table <table> --confirm
+    python3 db.py drop-column <table> <column>
     python3 db.py import-csv <table> <file.csv> [--key domain]
 
 Pass '-' to --rows / --updates / --ids to read the JSON payload from stdin.
@@ -464,6 +466,66 @@ def remove(path: str, table: str, ids: list | None = None, where: str | None = N
             "removed": removed, "rows": total}
 
 
+def drop_table(path: str, table: str) -> dict:
+    conn = connect(path)
+    try:
+        _require_table(conn, table)
+        row_count = conn.execute(f"SELECT COUNT(*) AS c FROM {_q(table)}").fetchone()["c"]
+        with conn:
+            conn.execute(f"DROP TABLE {_q(table)}")
+    finally:
+        conn.close()
+    return {"ok": True, "action": "drop-table", "table": table, "rowsDropped": row_count}
+
+
+def drop_column(path: str, table: str, column: str) -> dict:
+    """Drop a column, preserving every other column and every row.
+
+    Uses native `ALTER TABLE ... DROP COLUMN` when the running SQLite
+    supports it (3.35.0+); otherwise falls back to the standard SQLite
+    recipe of recreating the table without that column inside a single
+    transaction (rows, `_id` values and remaining columns untouched).
+    """
+    _check_ident(column, "column name")
+    if column == ID_COLUMN:
+        raise DbError(f'"{ID_COLUMN}" is the reserved primary key — it cannot be dropped')
+    conn = connect(path)
+    try:
+        _require_table(conn, table)
+        existing = _columns(conn, table)
+        if column not in existing:
+            raise DbError(f"column {column!r} not found in {table} — columns: {existing}")
+        remaining = [c for c in existing if c != column]
+        if len(remaining) <= 1:
+            raise DbError(f"cannot drop {column!r}: {table} would be left with no data columns")
+        with conn:
+            try:
+                conn.execute(f"ALTER TABLE {_q(table)} DROP COLUMN {_q(column)}")
+            except sqlite3.OperationalError:
+                # Older SQLite without DROP COLUMN support: recreate the
+                # table without the column, copying every row across.
+                tmp = f"{table}__drop_tmp"
+                conn.execute(f"DROP TABLE IF EXISTS {_q(tmp)}")
+                cols_sql = ", ".join(
+                    f"{_q(ID_COLUMN)} INTEGER PRIMARY KEY AUTOINCREMENT" if c == ID_COLUMN
+                    else f"{_q(c)} TEXT"
+                    for c in remaining
+                )
+                conn.execute(f"CREATE TABLE {_q(tmp)} ({cols_sql})")
+                col_list = ", ".join(_q(c) for c in remaining)
+                conn.execute(
+                    f"INSERT INTO {_q(tmp)} ({col_list}) SELECT {col_list} FROM {_q(table)}"
+                )
+                conn.execute(f"DROP TABLE {_q(table)}")
+                conn.execute(f"ALTER TABLE {_q(tmp)} RENAME TO {_q(table)}")
+            new_columns = _columns(conn, table)
+            total = conn.execute(f"SELECT COUNT(*) AS c FROM {_q(table)}").fetchone()["c"]
+    finally:
+        conn.close()
+    return {"ok": True, "action": "drop-column", "table": table,
+            "droppedColumn": column, "columns": new_columns, "rows": total}
+
+
 def import_csv(path: str, table: str, file: str, key: str | None = None) -> dict:
     if not os.path.isfile(file):
         raise DbError(f"file not found: {file}")
@@ -556,6 +618,15 @@ def main(argv=None) -> int:
     p.add_argument("--ids", default=None, help="JSON list of _id values, or '-' for stdin")
     p.add_argument("--where", default=None)
 
+    p = sub.add_parser("drop-table", help="permanently delete a table and all its rows")
+    p.add_argument("table")
+    p.add_argument("--confirm", action="store_true",
+                   help="required acknowledgement — this cannot be undone")
+
+    p = sub.add_parser("drop-column", help="drop one column, preserving all other columns and rows")
+    p.add_argument("table")
+    p.add_argument("column")
+
     p = sub.add_parser("import-csv", help="import a CSV file into a table")
     p.add_argument("table")
     p.add_argument("file")
@@ -584,6 +655,12 @@ def main(argv=None) -> int:
         elif args.command == "remove":
             ids = _load_json(args.ids, "--ids") if args.ids else None
             result = remove(path, args.table, ids, args.where)
+        elif args.command == "drop-table":
+            if not args.confirm:
+                raise DbError("drop-table requires --confirm (this permanently deletes the table)")
+            result = drop_table(path, args.table)
+        elif args.command == "drop-column":
+            result = drop_column(path, args.table, args.column)
         else:
             result = import_csv(path, args.table, args.file, args.key)
     except DbError as exc:

@@ -120,6 +120,24 @@
   }
   .grid-scroll { flex: 1; overflow: auto; }
   table { border-collapse: separate; border-spacing: 0; min-width: 100%; }
+  .table-toolbar {
+    flex: none; display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    padding: 10px 14px; border-bottom: 1px solid var(--border-soft);
+  }
+  .table-toolbar .search-wrap { flex: 1; min-width: 200px; max-width: 360px; }
+  .table-toolbar .search-wrap input { height: 32px; font-size: 12.5px; }
+  .toolbar-meta { font-size: 12px; color: var(--text-faint); font-variant-numeric: tabular-nums; }
+  .btn-toolbar {
+    display: inline-flex; align-items: center; gap: 5px;
+    height: 32px; padding: 0 12px; border-radius: 8px;
+    border: 1px solid var(--border); background: var(--card);
+    color: var(--text-dim); cursor: pointer; font-size: 12.5px; font-weight: 500;
+    font-family: inherit; transition: background .12s, color .12s, border-color .12s;
+  }
+  .btn-toolbar:hover { background: var(--hover); color: var(--text); }
+  .btn-toolbar.active { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+  .btn-toolbar:disabled { opacity: .45; cursor: default; }
+
   thead th {
     position: sticky; top: 0; z-index: 2;
     background: var(--hover); text-align: left;
@@ -129,7 +147,30 @@
     border-bottom: 1px solid var(--border);
     white-space: nowrap;
   }
-  thead th .type-ico { color: var(--text-faint); font-weight: 500; margin-right: 7px; font-size: 11px; }
+  thead.has-filters th { top: 0; }
+  thead tr.filter-row th {
+    top: 38px; z-index: 2; height: 36px; padding: 0 8px;
+    background: var(--card); border-bottom: 1px solid var(--border);
+  }
+  thead th.sortable { cursor: pointer; user-select: none; }
+  thead th.sortable:hover { color: var(--text); background: var(--card); }
+  thead th.sorted { color: var(--text); }
+  thead th .th-inner { display: inline-flex; align-items: center; gap: 5px; max-width: 100%; }
+  thead th .type-ico { color: var(--text-faint); font-weight: 500; font-size: 11px; flex: none; }
+  thead th.sorted .type-ico { color: var(--accent); }
+  thead th .sort-ico {
+    flex: none; font-size: 10px; line-height: 1; color: var(--text-faint);
+    opacity: 0; transition: opacity .12s, color .12s;
+  }
+  thead th.sortable:hover .sort-ico, thead th.sorted .sort-ico { opacity: 1; }
+  thead th.sorted .sort-ico { color: var(--accent); }
+  .col-filter {
+    width: 100%; height: 26px; padding: 0 8px; border-radius: 6px;
+    border: 1px solid var(--border); background: var(--bg);
+    color: var(--text); font-size: 11.5px; font-family: inherit; outline: none;
+  }
+  .col-filter:focus { border-color: var(--accent); }
+  .col-filter::placeholder { color: var(--text-faint); }
   tbody td {
     padding: 0 14px; height: 40px; vertical-align: middle;
     font-size: 13px;
@@ -526,7 +567,7 @@
 </script>
 <div id="root"></div>
 <script type="module">
-import React, { useState, useEffect, useRef, useCallback } from "https://esm.sh/react@18.3.1";
+import React, { useState, useEffect, useRef, useCallback, useMemo } from "https://esm.sh/react@18.3.1";
 import { createRoot } from "https://esm.sh/react-dom@18.3.1/client";
 import htm from "https://esm.sh/htm@3.1.1";
 
@@ -574,6 +615,29 @@ function columnType(header, values) {
   return "text";
 }
 const TYPE_ICON = { text: "Aa", number: "#", email: "@", link: "\u{1F517}", status: "●" };
+
+function compareCell(a, b, type) {
+  const va = a ?? "";
+  const vb = b ?? "";
+  if (va === "" && vb !== "") return 1;
+  if (vb === "" && va !== "") return -1;
+  if (type === "number") {
+    const na = parseFloat(String(va).replace(",", "."));
+    const nb = parseFloat(String(vb).replace(",", "."));
+    return (isNaN(na) ? -Infinity : na) - (isNaN(nb) ? -Infinity : nb);
+  }
+  return String(va).localeCompare(String(vb), undefined, { numeric: true, sensitivity: "base" });
+}
+
+function rowMatchesFilters(row, { global, colFilters, cols }) {
+  const q = global.trim().toLowerCase();
+  if (q && !cols.some(({ i }) => String(row[i] ?? "").toLowerCase().includes(q))) return false;
+  for (const { h, i } of cols) {
+    const fq = (colFilters[h] || "").trim().toLowerCase();
+    if (fq && !String(row[i] ?? "").toLowerCase().includes(fq)) return false;
+  }
+  return true;
+}
 
 function Cell({ value, type }) {
   if (value === "") return html`<span class="cell-empty">—</span>`;
@@ -933,6 +997,10 @@ function App() {
   const [theme, setTheme] = useState(() => {
     try { return localStorage.getItem("bricks-theme") || "dark"; } catch { return "dark"; }
   });
+  const [sort, setSort] = useState(null);              // { colIdx, dir: "asc"|"desc" } | null
+  const [globalFilter, setGlobalFilter] = useState("");
+  const [colFilters, setColFilters] = useState({});    // header -> filter text
+  const [showColFilters, setShowColFilters] = useState(false);
   const activeRef = useRef(active);
   activeRef.current = active;
   const allRef = useRef(null);
@@ -1012,6 +1080,10 @@ function App() {
     if (!active) return;
     setSelected(new Set());
     setConfirming(false);
+    setSort(null);
+    setGlobalFilter("");
+    setColFilters({});
+    setShowColFilters(false);
     loadTable(active).catch(e => setError(e.message));
   }, [active]);
 
@@ -1031,10 +1103,48 @@ function App() {
   // Technical columns (underscore-prefixed, e.g. _id) are never displayed.
   const cols = allHeaders.map((h, i) => ({ h, i })).filter(({ h }) => !h.startsWith("_"));
   const types = cols.map(({ h, i }) => columnType(h, rows.map(r => r[i] ?? "")));
-  const allChecked = canSelect && rows.length > 0 && selected.size === rows.length;
+
+  const hasFilters = globalFilter.trim() !== "" || Object.values(colFilters).some(v => v.trim());
+  const displayRows = useMemo(() => {
+    let result = rows.filter(r => rowMatchesFilters(r, { global: globalFilter, colFilters, cols }));
+    if (sort) {
+      const { colIdx, dir } = sort;
+      const colIndex = cols[colIdx].i;
+      const type = types[colIdx];
+      result = [...result].sort((a, b) => {
+        const cmp = compareCell(a[colIndex], b[colIndex], type);
+        return dir === "desc" ? -cmp : cmp;
+      });
+    }
+    return result;
+  }, [rows, globalFilter, colFilters, cols, sort, types]);
+
+  const toggleSort = (colIdx) => {
+    setSort(prev => {
+      if (!prev || prev.colIdx !== colIdx) return { colIdx, dir: "asc" };
+      if (prev.dir === "asc") return { colIdx, dir: "desc" };
+      return null;
+    });
+  };
+  const setColFilter = (header, value) => {
+    setColFilters(prev => {
+      const next = { ...prev, [header]: value };
+      if (!value.trim()) delete next[header];
+      return next;
+    });
+  };
+  const clearFilters = () => {
+    setGlobalFilter("");
+    setColFilters({});
+    setShowColFilters(false);
+  };
+
+  const allChecked = canSelect && displayRows.length > 0
+    && displayRows.every(r => selected.has(r[idIdx]));
+  const someChecked = canSelect && displayRows.some(r => selected.has(r[idIdx]));
   useEffect(() => {
-    if (allRef.current) allRef.current.indeterminate = selected.size > 0 && !allChecked;
-  }, [selected, allChecked]);
+    if (allRef.current) allRef.current.indeterminate = someChecked && !allChecked;
+  }, [selected, allChecked, someChecked]);
 
   const toggleRow = (id) => {
     const next = new Set(selected);
@@ -1043,7 +1153,12 @@ function App() {
     setConfirming(false);
   };
   const toggleAll = () => {
-    setSelected(allChecked ? new Set() : new Set(rows.map(r => r[idIdx])));
+    if (allChecked) {
+      const visible = new Set(displayRows.map(r => r[idIdx]));
+      setSelected(prev => new Set([...prev].filter(id => !visible.has(id))));
+    } else {
+      setSelected(prev => new Set([...prev, ...displayRows.map(r => r[idIdx])]));
+    }
     setConfirming(false);
   };
 
@@ -1069,7 +1184,7 @@ function App() {
   const doExport = async (format) => {
     if (!table || exporting) return;
     const headers = cols.map(({ h }) => h);
-    const dataRows = rows.map(r => cols.map(({ i }) => r[i] ?? ""));
+    const dataRows = displayRows.map(r => cols.map(({ i }) => r[i] ?? ""));
     const base = (active || "export").replace(/\.csv$/, "");
     setExporting(format);
     try {
@@ -1118,29 +1233,75 @@ function App() {
     body = html`
       <div class="table-zone">
         <div class="card">
+          <div class="table-toolbar">
+            <div class="search-wrap">
+              <input type="text" value=${globalFilter} placeholder="Rechercher dans toutes les colonnes…"
+                onInput=${e => setGlobalFilter(e.target.value)} />
+              <span class="search-ico">🔍</span>
+            </div>
+            <button
+              class=${"btn-toolbar" + (showColFilters ? " active" : "")}
+              title="Afficher un filtre par colonne"
+              onClick=${() => setShowColFilters(v => !v)}>
+              Filtres colonnes
+            </button>
+            ${(hasFilters || sort) && html`
+              <button class="btn-toolbar" title="Réinitialiser tri et filtres" onClick=${() => { clearFilters(); setSort(null); }}>
+                Effacer
+              </button>`}
+            ${(hasFilters || sort) && html`
+              <span class="toolbar-meta">${displayRows.length} / ${rows.length} lignes</span>`}
+          </div>
           <div class="grid-scroll">
             <table>
-              <thead><tr>
-                ${canSelect && html`<th class="col-check"><input type="checkbox" ref=${allRef} checked=${allChecked} onChange=${toggleAll} /></th>`}
-                <th class="col-num"></th>
-                ${cols.map(({ h }, k) => html`<th key=${h}><span class="type-ico">${TYPE_ICON[types[k]]}</span>${h}</th>`)}
-              </tr></thead>
+              <thead class=${showColFilters ? "has-filters" : ""}>
+                <tr>
+                  ${canSelect && html`<th class="col-check"><input type="checkbox" ref=${allRef} checked=${allChecked} onChange=${toggleAll} /></th>`}
+                  <th class="col-num"></th>
+                  ${cols.map(({ h }, k) => {
+                    const sorted = sort && sort.colIdx === k;
+                    return html`<th key=${h}
+                      class=${"sortable" + (sorted ? " sorted sorted-" + sort.dir : "")}
+                      title=${sorted ? (sort.dir === "asc" ? "Tri croissant — clic pour décroissant" : "Tri décroissant — clic pour effacer") : "Cliquer pour trier"}
+                      onClick=${() => toggleSort(k)}>
+                      <span class="th-inner">
+                        <span class="type-ico">${TYPE_ICON[types[k]]}</span>
+                        <span>${h}</span>
+                        <span class="sort-ico">${sorted ? (sort.dir === "asc" ? "↑" : "↓") : "↕"}</span>
+                      </span>
+                    </th>`;
+                  })}
+                </tr>
+                ${showColFilters && html`<tr class="filter-row">
+                  ${canSelect && html`<th class="col-check"></th>`}
+                  <th class="col-num"></th>
+                  ${cols.map(({ h }) => html`<th key=${h}>
+                    <input class="col-filter" type="text" value=${colFilters[h] || ""} placeholder="Filtrer…"
+                      onInput=${e => setColFilter(h, e.target.value)} onClick=${e => e.stopPropagation()} />
+                  </th>`)}
+                </tr>`}
+              </thead>
               <tbody>
-                ${rows.map((r, i) => {
-                  const rowId = canSelect ? r[idIdx] : null;
-                  const isSel = rowId !== null && selected.has(rowId);
-                  return html`<tr key=${rowId ?? i} class=${isSel ? "selected" : ""}>
-                    ${canSelect && html`<td class="col-check"><input type="checkbox" checked=${isSel} onChange=${() => toggleRow(rowId)} /></td>`}
-                    <td class="col-num">${i + 1}</td>
-                    ${cols.map(({ i: c }, k) => html`<td key=${k}><${Cell} value=${r[c] ?? ""} type=${types[k]} /></td>`)}
-                  </tr>`;
-                })}
+                ${displayRows.length === 0
+                  ? html`<tr><td colspan=${(canSelect ? 2 : 1) + cols.length} style=${{ textAlign: "center", color: "var(--text-faint)", padding: "32px 14px" }}>
+                      Aucune ligne ne correspond aux filtres
+                    </td></tr>`
+                  : displayRows.map((r, i) => {
+                      const rowId = canSelect ? r[idIdx] : null;
+                      const isSel = rowId !== null && selected.has(rowId);
+                      return html`<tr key=${rowId ?? i} class=${isSel ? "selected" : ""}>
+                        ${canSelect && html`<td class="col-check"><input type="checkbox" checked=${isSel} onChange=${() => toggleRow(rowId)} /></td>`}
+                        <td class="col-num">${i + 1}</td>
+                        ${cols.map(({ i: c }, k) => html`<td key=${k}><${Cell} value=${r[c] ?? ""} type=${types[k]} /></td>`)}
+                      </tr>`;
+                    })}
               </tbody>
             </table>
           </div>
           <div class="card-footer">
-            <span>${rows.length} row${rows.length === 1 ? "" : "s"}</span><span>·</span>
+            <span>${displayRows.length}${hasFilters ? ` / ${rows.length}` : ""} row${displayRows.length === 1 ? "" : "s"}</span><span>·</span>
             <span>${cols.length} column${cols.length === 1 ? "" : "s"}</span>
+            ${sort && html`<span>·</span><span>tri : ${cols[sort.colIdx].h} ${sort.dir === "asc" ? "↑" : "↓"}</span>`}
             ${updatedAt && html`<span>·</span><span>updated ${updatedAt.toLocaleTimeString()}</span>`}
           </div>
         </div>
@@ -1168,7 +1329,9 @@ function App() {
         </button>
       </div>`}`;
 
-  let content;
+  // Campaigns désactivé momentanément — on affiche toujours la vue data.
+  let content = dataView;
+  /*
   if (view === "data") {
     content = dataView;
   } else if (view === "campaigns") {
@@ -1192,11 +1355,13 @@ function App() {
         </div>
       </div></div>`;
   }
+  */
 
   return html`
     <div class="app">
       <div class="topbar">
-        <button class="icon-btn" title=${sidebarOpen ? "Fermer le menu" : "Ouvrir le menu"} onClick=${() => setSidebarOpen(o => !o)}>☰</button>
+        ${/* Sidebar désactivée momentanément.
+        html`<button class="icon-btn" title=${sidebarOpen ? "Fermer le menu" : "Ouvrir le menu"} onClick=${() => setSidebarOpen(o => !o)}>☰</button>` */ null}
         <div class="brand"><span class="logo">■</span> Bricks</div>
         ${status && status.initialized && status.workspaces && status.workspaces.length > 0 && html`
           <div class="sep"></div>
@@ -1225,14 +1390,15 @@ function App() {
       </div>
       ${error && html`<div class="error-banner">${error}</div>`}
       <div class="main">
-        <nav class=${"sidebar" + (sidebarOpen ? "" : " closed")}>
+        ${/* Sidebar désactivée momentanément.
+        html`<nav class=${"sidebar" + (sidebarOpen ? "" : " closed")}>
           <button class=${"nav-item" + (view === "data" ? " active" : "")} onClick=${() => setView("data")}>
             <span class="nav-ico">▦</span> Data
           </button>
           <button class=${"nav-item" + (view !== "data" ? " active" : "")} onClick=${() => setView("campaigns")}>
             <span class="nav-ico">✉</span> Campaigns
           </button>
-        </nav>
+        </nav>` */ null}
         <div class="content">
           ${content}
         </div>
@@ -1244,7 +1410,7 @@ function App() {
               <h3>Exporter ${(active || "").replace(/\.csv$/, "")}</h3>
               <button class="icon-btn" title="Fermer" disabled=${!!exporting} onClick=${() => setExportOpen(false)}>✕</button>
             </div>
-            <p class="modal-sub">${rows.length} ligne${rows.length === 1 ? "" : "s"} · ${cols.length} colonne${cols.length === 1 ? "" : "s"}. Choisis un format.</p>
+            <p class="modal-sub">${displayRows.length}${hasFilters ? ` / ${rows.length}` : ""} ligne${displayRows.length === 1 ? "" : "s"} · ${cols.length} colonne${cols.length === 1 ? "" : "s"}. Choisis un format.</p>
             <div class="export-opts">
               <button class="export-opt" disabled=${!!exporting} onClick=${() => doExport("csv")}>
                 <span class="fmt">${exporting === "csv" ? "Export…" : "CSV"}</span>
