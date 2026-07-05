@@ -72,9 +72,26 @@ next week automatically joins existing motions.
 | CONVENTIONS §8 money gate + §9 BRICK contracts | Robin | ✅ shipped |
 | workspace / interface / find / enrich / transform / scan-mentions | Rémi | ✅ shipped (find + enrich patched after test #1) |
 | find-directory-scrape / find-lookalike / write-sequence / playbook-lookalike | Robin | ✅ shipped |
-| enrich-firmographics (+ tools/firmo.py, official gov API) | Robin | ✅ shipped |
-| enrich-buying-committee (targeting plan + waterfall) | Robin | ✅ shipped |
+| enrich-firmographics (+ tools/firmo.py, official gov API) | Robin | ✅ shipped, field-tested ×2 |
+| enrich-buying-committee (targeting plan + waterfall) | Robin | ✅ shipped, field-tested |
 | Bright Data + FullEnrich MCP wiring | Robin | ✅ shipped, both Connected |
+
+### Field-test log — the loop that improves the product
+
+Every fix below came from a real desktop test session. Plugin version at
+head: **0.3.1**.
+
+| Version | Trigger | What changed |
+|---|---|---|
+| 0.2.0 | stale-cache discovery (two sessions ran the pre-merge plugin) | CLAUDE.md Rule 3: version bump on every plugin change; merged plugin actually live |
+| 0.2.1 | tech-startups run #1 | `parent_company` (holding detection, e.g. Predictice → FORSETI/Doctrine), siren-direct lookup, trade-name retry |
+| 0.2.2 | tech-startups run #2 | `company_category` (INSEE, group-level) — second subsidiary signal (caught traqfood → Mérieux) |
+| 0.3.0 | — | enrich-buying-committee shipped (doctrine + verified waterfall) |
+| 0.3.1 | relance-devis-habitat run (couvreurs) | `company_name` on contacts (readable table), kill-rule scope pattern (no invented statuses), postal-code API filter (resolved 4 trade-name artisans; the historic "Merci" ambiguity now high-confidence) |
+
+Full pipeline validated in the field at **0 credits** end to end:
+sourcing (FullEnrich free preview) → firmographics (official API) →
+one verified decision-maker per company (registry + free searches).
 
 ### To build — Robin (data in)
 
@@ -341,11 +358,16 @@ receipts only in the conversation.
 
 ## 5. Milestones
 
-1. **Retest pass** — full test script on the merged main (in progress,
-   6 fixes already shipped from test #1).
-2. **Score + onboard** (Rémi) and **firmographics + buying-committee**
-   (Robin) — unlocks the early-stop demo moment: "it stops spending on
-   its own".
+1. ~~Retest pass~~ — DONE: two field campaigns validated end to end
+   (tech-startups, relance-devis-habitat), five product versions shipped
+   from their findings.
+2. **Score (kill gate + icp-fit) — THE next brick.** Kill rules are
+   currently flagged everywhere but enforced nowhere; this brick turns
+   them into the early-stop demo moment ("it stops spending on its
+   own") and produces the tiers that prioritize emails and sequences.
+   Rémi's per the split — Robin takes it if Rémi is still under water.
+   **Onboard** (Rémi) upgrades the context-in-a-prompt into the guided
+   interview.
 3. **Full pipeline demo** on a real ICP: find → enrich → kill/score →
    contacts → emails → sequences, the table telling the story live.
 4. **crm-import + playbook-lookalike** end-to-end (the differentiator vs
