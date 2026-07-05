@@ -17,6 +17,7 @@ Endpoints:
     GET  /api/status                same JSON as `workspace.py status`
     GET  /api/table/<name>          {"headers": [...], "rows": [[...], ...]}
     POST /api/table/<name>/remove   {"ids": ["a1b2...", ...]} — delete rows by _id
+    POST /api/workspace/switch      {"name": "<workspace>"} — switch current workspace
 
 Rows are addressed by the reserved `_id` column (INTEGER PRIMARY KEY),
 never by row number: ids do not shift when the table changes underneath the
@@ -93,6 +94,17 @@ def _read_table(name: str) -> dict:
     return {"table": name, "headers": headers, "rows": rows}
 
 
+def _switch_workspace(name) -> dict:
+    """Switch the current workspace via the same code path as the skill."""
+    if not isinstance(name, str) or not name.strip():
+        raise ApiError(400, '"name" must be a non-empty string')
+    try:
+        ws.switch(ROOT, name)
+    except ws.WorkspaceError as exc:
+        raise ApiError(400, str(exc)) from None
+    return ws.status(ROOT)
+
+
 def _remove_rows(name: str, ids) -> dict:
     if not isinstance(ids, list) or not ids:
         raise ApiError(400, '"ids" must be a non-empty list of _id values')
@@ -148,14 +160,17 @@ class Handler(BaseHTTPRequestHandler):
         path = urlparse(self.path).path
         match = re.fullmatch(r"/api/table/([^/]+)/remove", path)
         try:
-            if not match:
-                raise ApiError(404, f"no such endpoint: {path}")
             length = int(self.headers.get("Content-Length") or 0)
             try:
                 payload = json.loads(self.rfile.read(length) or b"{}")
             except json.JSONDecodeError as exc:
                 raise ApiError(400, f"invalid JSON body: {exc}") from None
-            self._send_json(200, _remove_rows(match.group(1), payload.get("ids")))
+            if path == "/api/workspace/switch":
+                self._send_json(200, _switch_workspace(payload.get("name")))
+            elif match:
+                self._send_json(200, _remove_rows(match.group(1), payload.get("ids")))
+            else:
+                raise ApiError(404, f"no such endpoint: {path}")
         except ApiError as exc:
             self._send_json(exc.code, {"ok": False, "error": str(exc)})
 
