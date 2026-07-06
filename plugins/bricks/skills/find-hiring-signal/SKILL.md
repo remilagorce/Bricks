@@ -16,7 +16,7 @@ in this directory's BRICK.md.
 ## Before anything
 
 Follow `${CLAUDE_PLUGIN_ROOT}/CONVENTIONS.md` §2 and §3 — HARD context
-gate here (like write-sequence): the pain matrix derives from
+gate here (like write-outreach): the pain matrix derives from
 `context/offer.md` + `context/icp.md`; if they are TODO placeholders,
 stop and fill them first. Bright Data is the preferred engine; when
 it is down, the free channel (built-in web search + page fetch)
@@ -43,12 +43,19 @@ Every query encodes ONE GTM hypothesis —
 `"<title>" "<tool>" "<pain>" "<geo>" site:<source>` — never
 `"startup jobs France"`. Show 3 example queries with the matrix.
 
-**ONE GO covers the whole run**: matrix + phase-1 budget + the commit
-cut (default ≥ 70, 50-69 parked in staging) are confirmed in a SINGLE
-question — after that GO the run goes to the end without re-asking
-(field-tested: 5-6 serial gates per run is what makes it slow). It
+**Below the big-spend threshold (§8, default 50 credits) the run does
+not ask at all**: the matrix + budget + cut (default ≥ 70, 50-69
+parked in staging) are ANNOUNCED and the hunt proceeds — a wrong
+matrix costs ~0 with jobs.py, and the user adjusts after the receipt.
+Above the threshold: ONE grouped GO for everything (field-tested: 5-6
+serial gates per run is what makes it slow). It
 returns to the user only if reality invalidates the plan (absurd
-score distribution, an unplanned paid step). Persist to
+score distribution, an unplanned paid step). A chain GO (follow-on
+bricks named by the user in the same request) folds their budget
+lines into this same plan — zero mid-chain confirmations, every
+receipt ends with statements, never questions, and a downstream
+brick's HARD gate is never overridden: satisfy it at plan time or end
+the chain before that brick, saying what is missing. Persist to
 `memory/state.json` (`hiring_matrix`) + one NOTES.md line; re-runs
 reuse it silently and re-ask only if `context/` changed.
 
@@ -75,6 +82,8 @@ by the volume bonus — in under a minute).
 (`greenhouse.io`, `jobs.lever.co`, `ashbyhq.com`, `workable.com`,
 `teamtailor.com`, `smartrecruiters.com`, `welcometothejungle.com`),
 `site:linkedin.com/jobs` + `web_data_linkedin_job_listings`, Indeed.
+All queries of the escalation go out as ONE `search_engine_batch` call
+(and page reads as ONE `scrape_batch`), never serial queries (§9).
 Budget fixed at the phase-0 GO (§8); 1-credit health control first —
 Bright Data empty (29/29 on a field run) → built-in web search
 carries these lanes too. NO date operators anywhere (field-tested
@@ -126,7 +135,7 @@ these rows like on any other.
 
 ## Phase 4 — commit and hand over
 
-Via `db-writer` (absolute db path): `companies` rows — `name`,
+Via `db.py` (§5, pass `--db <absolute path>`): `companies` rows — `name`,
 `domain` (verified on the offer or the company site, never guessed;
 domain-less rows are name-checked like find-directory-scrape),
 `source='hiring-signal'`, `status='new'`, `hiring_score`,
@@ -141,22 +150,22 @@ writers must key one offer identically or cross-run dedup breaks
 (field-tested: a backfill and a live run produced two conventions).
 Career-page evidence keys on the domain alone (one hiring signal per
 company); board offers keep their full offer URL. Commits
-go in ONE `db-writer` dispatch per phase — the staging file, batched
+go in ONE `db.py` write per phase — the staging file, batched
 — never one dispatch per row.
 
 **The angle doctrine**: `hiring_angle` uses the offer as contextual
 proof, never as a creepy opener — "vous structurez votre équipe RevOps
 autour de HubSpot et du lead routing…", NOT "j'ai vu que vous
-recrutez". write-sequence picks it up as-is.
+recrutez". write-outreach picks it up as-is.
 
 Receipt: "X companies committed (score ≥ 70), Y parked in staging
 (50-69), Z rejected (top reasons). Credits: A queries + B pages." Max
 3 sample rows. Next steps: enrich-firmographics → score →
-enrich-buying-committee → write-sequence (the angle is ready).
+enrich-buying-committee → write-outreach (the angle is ready).
 
 ## Volume mode
 
 Subagents per query batch (≤ 10 parallel), writing to staging ONLY;
-the main thread verifies, dedups, scores and commits via `db-writer`.
+the main thread verifies, dedups, scores and commits via `db.py`.
 The single upfront budget covers the whole run — subagents never
 spend beyond it.

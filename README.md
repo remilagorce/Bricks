@@ -46,7 +46,7 @@ checkout, or the GitHub repo once published:
 /plugin install bricks@bricks
 ```
 
-This installs the `bricks` plugin (skills, the `db-writer` agent, the
+This installs the `bricks` plugin (skills, the plumbing tools, the
 `fullenrich` MCP server, the local web UI) from the `bricks` marketplace.
 Restart Claude Code once installation finishes.
 
@@ -87,11 +87,12 @@ switch workspace acme-outbound
 
 ### Write to the database
 
-You never write to `bricks.db` yourself, and neither does any skill
-directly: every insert/update/read is delegated to the **`db-writer`**
-agent, the single place that knows how to call `tools/db.py`. In practice
-this is invisible — just ask for the outcome ("enrichis les 40 entreprises
-sans email"), and the skill in charge asks `db-writer` to do the actual
+You never write to `bricks.db` yourself: every insert/update/read goes
+through **`tools/db.py`**, the single door to the database, called
+directly by the skill in charge (no subagent in between — `db.py` is
+deterministic and prints JSON receipts, so there is nothing to delegate to
+a model). In practice this is invisible — just ask for the outcome
+("enrichis les 40 entreprises sans email"), and the skill does the actual
 read/write and reports back a receipt (counts, not raw rows). See
 `CLAUDE.md` and `plugins/bricks/CONVENTIONS.md` for the full rationale and
 contract.

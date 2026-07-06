@@ -22,22 +22,22 @@ Follow the mandatory procedure in `${CLAUDE_PLUGIN_ROOT}/CONVENTIONS.md`:
 
 ## Workflow
 
-1. **Read before writing** — ask `db-writer` for the table's schema and a
-   handful of sample rows, and state what you see. Confirm the
-   transformation with the user if it is destructive (deleting rows,
-   overwriting a column).
+1. **Read before writing** — run `db.py schema` / `db.py select` (§5) for
+   the table's schema and a handful of sample rows, and state what you see.
+   Confirm the transformation with the user if it is destructive (deleting
+   rows, overwriting a column).
 
-2. **Apply through `db-writer`** — never any other write path:
-   - Derived/cleaned columns → ask it to update by `_id` (unknown columns
-     are created automatically), or bulk-set a column for rows matching a
-     condition, for uniform assignments.
-   - Disqualifying rows (kill rules) → prefer asking it to set
-     `status=disqualified` for rows matching the kill condition over
-     deleting — downstream skills skip them and the data stays auditable.
-   - Dropping rows for real → ask it for a count of what matches first,
-     show the user, then ask it to remove those ids/condition.
-   - New table (split, merge, aggregate) → ask it to select from the
-     sources, then insert into a new table; keep the source tables intact.
+2. **Apply through `db.py`** (CONVENTIONS §5) — never any other write path:
+   - Derived/cleaned columns → `db.py modify --updates` by `_id` (unknown
+     columns are created automatically), or `db.py modify --set … --where`
+     for uniform assignments.
+   - Disqualifying rows (kill rules) → prefer `db.py modify --set
+     status=disqualified --where <kill condition>` over deleting —
+     downstream skills skip them and the data stays auditable.
+   - Dropping rows for real → `db.py count --where …` first, show the user,
+     then `db.py remove --ids`/`--where`.
+   - New table (split, merge, aggregate) → `db.py select` from the sources,
+     then `db.py add` into a new table; keep the source tables intact.
 
 3. **Prefer new columns over destroyed data** — e.g. write
    `domain_normalized` next to `domain` rather than overwriting, unless

@@ -45,16 +45,15 @@ Follow the mandatory procedure in `${CLAUDE_PLUGIN_ROOT}/CONVENTIONS.md`:
    directly. For large or interruptible runs, append raw results to
    `staging/find-<YYYY-MM-DD>/raw-results.jsonl` batch by batch and keep
    source cursors in `memory/state.json` (see CONVENTIONS §6).
-3. **Commit** — validate, then ask the `db-writer` agent to insert the
-   rows, deduped on `domain` for companies / `email` for contacts (e.g.
-   "insert these N company rows into `companies`, dedup on domain" with the
-   validated rows attached). `db-writer` skips rows whose key already
-   exists and reports how many.
+3. **Commit** — validate, then insert the rows with `db.py` (CONVENTIONS
+   §5), deduped on `domain` for companies / `email` for contacts
+   (`db.py add companies --rows … --key domain --db <path>`). `db.py` skips
+   rows whose key already exists and reports how many.
 
    Standard columns — `companies`: `name, domain, source, status` ("new").
    `contacts`: `company_id` (the company's `_id`), `full_name, role, email,
    linkedin_url, source, status`. Add criteria-specific columns freely —
-   `db-writer` creates them on the fly.
+   `db.py` creates them on the fly.
 4. **Close the run** — update `memory/state.json` (sources covered,
    counts), append a summary line to `NOTES.md`, report a receipt to the
    user: how many found, how many duplicates skipped, how many rejected
@@ -62,4 +61,4 @@ Follow the mandatory procedure in `${CLAUDE_PLUGIN_ROOT}/CONVENTIONS.md`:
    the database.
 
 Never write half-validated rows to the database — that is what `staging/`
-is for. Never touch `bricks.db` yourself — always go through `db-writer`.
+is for. Never touch `bricks.db` with raw SQL — always go through `db.py` (§5).

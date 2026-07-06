@@ -23,7 +23,7 @@ Ask where the best customers live, and route on what the user provides:
   available in this workspace, use it; otherwise SAY SO honestly and fall
   back — never fake a CRM connection. A CSV export from any CRM works
   today.
-- a CSV path or a dictated list → commit via `db-writer` into `companies`
+- a CSV path or a dictated list → commit via `db.py add` into `companies`
   with `segment='seed'`, `source=<crm|csv|dictated>`, dedup on domain.
 Target 5-15 seeds. Receipt.
 
@@ -60,6 +60,6 @@ gate). Candidates matching the signal → the lookalike list. Others → stay
 as ordinary prospects for another campaign; do not delete.
 
 Final receipt: seeds, pattern, signal, sourced, matching, and the next
-step (enrich emails then write-sequence on the matches). Update
+step (enrich emails then write-outreach on the matches). Update
 `memory/state.json` and `NOTES.md` at every phase — this motion is long,
 it must survive an interruption.

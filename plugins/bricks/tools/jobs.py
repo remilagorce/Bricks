@@ -7,7 +7,7 @@ company career pages. No LLM in the loop: this tool generates queries from
 a confirmed pain matrix, parses structured offer cards, flags agency and
 stage noise, matches tool/pain keywords and pre-scores the mechanical part
 of the grid (max 65/100). Judgment — category fit, angles, the final cut —
-stays with the calling skill; database writes stay with db-writer. This
+stays with the calling skill; database writes go through db.py. This
 tool NEVER touches bricks.db: it only writes staging files.
 
 Used by: find-hiring-signal (hunt mode), signal-person pass 3 (check mode).
@@ -16,7 +16,12 @@ Usage:
     python3 jobs.py hunt --matrix matrix.json --out staging/hiring-<date>
     python3 jobs.py check --companies companies.json --out staging/signals-<date> \
         --keywords "couvreur,charpentier"   # trade sweep shared by the batch
-    options: --max-queries 30  --max-details 40  --keep-agencies
+    options: --max-queries 30  --max-details 40  --keep-agencies  --workers 6
+
+Fetches run in parallel (--workers) behind a PER-HOST rate limiter:
+request starts on one host stay RATE_SLEEP apart (politeness unchanged),
+different hosts proceed concurrently. Output files are identical to the
+serial version — results are assembled in input order.
 
 matrix.json (hunt):
     {"titles": ["couvreur", ...],             REQUIRED - one query per title x location
@@ -37,11 +42,13 @@ Output files in --out:
 """
 
 import argparse
+import concurrent.futures
 import datetime
 import html as htmllib
 import json
 import re
 import sys
+import threading
 import time
 import unicodedata
 import urllib.error
@@ -84,6 +91,39 @@ HIRING_WORDS = re.compile(
     r"offre[s]? d'emploi|candidature)", re.I)
 
 state = {"fetches": 0, "errors": []}
+_state_lock = threading.Lock()
+
+
+class HostLimiter:
+    """Politeness, per host: request starts on ONE host stay `interval`
+    apart process-wide; different hosts proceed in parallel."""
+
+    def __init__(self, interval):
+        self.interval = interval
+        self._lock = threading.Lock()
+        self._next_at = {}
+
+    def acquire(self, url):
+        host = urllib.parse.urlsplit(url).netloc
+        with self._lock:
+            now = time.monotonic()
+            start = max(now, self._next_at.get(host, 0.0))
+            self._next_at[host] = start + self.interval
+        if start > now:
+            time.sleep(start - now)
+
+
+LIMITER = HostLimiter(RATE_SLEEP)
+
+
+def pmap(fn, jobs, workers):
+    """Run fn(*args) over a list of args-tuples in parallel; results come
+    back in INPUT order, so downstream files stay deterministic."""
+    if workers <= 1 or len(jobs) <= 1:
+        return [fn(*j) for j in jobs]
+    with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
+        futures = [pool.submit(fn, *j) for j in jobs]
+        return [f.result() for f in futures]
 
 
 def log(msg):
@@ -94,16 +134,18 @@ def fetch(url, binary=False):
     """One polite GET with a single retry; failures land in summary.errors."""
     for attempt in (1, 2):
         try:
+            LIMITER.acquire(url)  # all pacing lives here — callers never sleep
             req = urllib.request.Request(url, headers={
                 "User-Agent": UA, "Accept-Language": "fr-FR,fr;q=0.9"})
             with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:
                 data = resp.read()
-            state["fetches"] += 1
-            time.sleep(RATE_SLEEP)
+            with _state_lock:
+                state["fetches"] += 1
             return data if binary else data.decode("utf-8", errors="replace")
         except Exception as e:
             if attempt == 2:
-                state["errors"].append(f"{url} -> {e}")
+                with _state_lock:
+                    state["errors"].append(f"{url} -> {e}")
                 return None
             time.sleep(1.5)
 
@@ -426,20 +468,23 @@ def group_by_company(offers):
     return out
 
 
-def fetch_details(offers, max_details):
-    """Spend the detail budget on the most promising undated cards first."""
-    budget = max_details
+def fetch_details(offers, max_details, workers=1):
+    """Spend the detail budget on the most promising undated cards first.
+
+    Target selection is identical to the serial version (walk the ranked
+    list, same budget rules); only the fetches run in parallel — each
+    thread mutates a distinct offer dict, so no locking is needed."""
     ranked = sorted(offers, key=lambda o: (-(len(o["pain_hits"]) + len(o["tool_hits"])),
                                            o["posted_date"] is not None))
+    targets = []
     for o in ranked:
-        if budget <= 0:
+        if len(targets) >= max_details:
             break
         if o["source"] == "francetravail":
-            ft_detail(o)
-            budget -= 1
+            targets.append((ft_detail, o))
         elif o["source"] == "hellowork" and not o["posted_date"]:
-            hw_detail(o)
-            budget -= 1
+            targets.append((hw_detail, o))
+    pmap(lambda detail, offer: detail(offer), targets, workers)
     return offers
 
 
@@ -470,12 +515,16 @@ def run_hunt(args):
             for src in sources:
                 queries.append((src, title, loc))
     queries = queries[:args.max_queries]
-    for src, title, loc in queries:
+
+    def one_query(src, title, loc):
         log(f"[hunt] {src}: {title} @ {loc or 'France'}")
-        raw += (ft_search if src == "francetravail" else hw_search)(title, loc)
+        return (ft_search if src == "francetravail" else hw_search)(title, loc)
+
+    for cards in pmap(one_query, queries, args.workers):
+        raw += cards
     # triage once for keyword hits, fetch details on survivors, triage again
     kept, rejected = triage(raw, matrix, args.keep_agencies)
-    fetch_details(kept, args.max_details)
+    fetch_details(kept, args.max_details, args.workers)
     kept, late_rejects = triage(kept, matrix, args.keep_agencies)
     rejected += late_rejects
     companies = group_by_company(kept)
@@ -510,15 +559,22 @@ def run_check(args):
     keywords = [k.strip() for k in (args.keywords or "").split(",") if k.strip()]
     if keywords:
         locations = sorted({c.get("location", "") for c in rows})
-        for kw in keywords:
-            for loc in locations:
-                log(f"[check-sweep] {kw} @ {loc or 'France'}")
-                for card in ft_search(kw, loc):
-                    owner = match_company(card["company_name"], rows)
-                    if owner is not None:
-                        swept.setdefault(id(owner), []).append(card)
 
-    for c in rows:
+        def sweep_one(kw, loc):
+            log(f"[check-sweep] {kw} @ {loc or 'France'}")
+            return ft_search(kw, loc)
+
+        sweep_jobs = [(kw, loc) for kw in keywords for loc in locations]
+        for cards in pmap(sweep_one, sweep_jobs, args.workers):
+            for card in cards:
+                owner = match_company(card["company_name"], rows)
+                if owner is not None:
+                    swept.setdefault(id(owner), []).append(card)
+
+    def check_one(c):
+        # swept is read-only here; each thread works its own company dict.
+        # Inner fetch_details stays serial (≤3 fetches) — the parallelism
+        # is across companies, no nested pools.
         log(f"[check] {c.get('name')}")
         raw = list(swept.get(id(c), []))
         cards = ft_search(c.get("name", ""), c.get("location", ""))
@@ -534,12 +590,17 @@ def run_check(args):
             o["company_id"] = c.get("company_id")
         freshest = max((o["posted_date"] for o in kept if o["posted_date"]),
                        default=None)
-        verdicts.append({
+        verdict = {
             "company_id": c.get("company_id"), "company_name": c.get("name"),
             "found": len(kept), "freshest": freshest,
             "verdict": "hiring" if kept else "quiet",
             "offers": [o["offer_id"] for o in kept],
-        })
+        }
+        return kept, rejected, verdict
+
+    for kept, rejected, verdict in pmap(check_one, [(c,) for c in rows],
+                                        args.workers):
+        verdicts.append(verdict)
         all_kept += kept
         all_rejected += rejected
     write_out(args.out, all_kept, all_rejected, verdicts, {
@@ -573,6 +634,9 @@ def main():
         s.add_argument("--max-queries", type=int, default=30)
         s.add_argument("--max-details", type=int, default=40)
         s.add_argument("--keep-agencies", action="store_true")
+        s.add_argument("--workers", type=int, default=6,
+                       help="parallel fetches; per-host politeness is kept "
+                            "by the shared limiter (default 6)")
     args = p.parse_args()
     (run_hunt if args.mode == "hunt" else run_check)(args)
 

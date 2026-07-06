@@ -4,7 +4,7 @@
 |---|---|
 | family | find (companies, signal-driven) |
 | target | writes companies + signals |
-| method | user-confirmed pain matrix → `tools/jobs.py hunt` (deterministic: France Travail + HelloWork parsed, agencies flagged, prescore 65/100, companies grouped — free, seconds) → SERP escalation only for ATS/LinkedIn/Indeed lanes → judgment points + cut → commit via db-writer |
+| method | user-confirmed pain matrix → `tools/jobs.py hunt` (deterministic: France Travail + HelloWork parsed, agencies flagged, prescore 65/100, companies grouped — free, seconds) → SERP escalation only for ATS/LinkedIn/Indeed lanes → judgment points + cut → commit via db.py |
 | cost | 0 credits on the script lanes; ~1 credit per query/page only on SERP escalation (caps 30/40); one upfront GO covers the run |
 
 ## IN
@@ -51,9 +51,9 @@
   30 queries / 40 page reads without explicit override; the run never
   re-asks unless reality invalidates the plan.
 - 1-credit channel health control first; staffing agencies excluded in
-  the queries (negative keywords), not post-hoc; one db-writer
-  dispatch per phase, never per row.
-- Subagents write to staging only; `db-writer` commits.
+  the queries (negative keywords), not post-hoc; one db.py
+  write per phase, never per row.
+- Subagents write to staging only; `db.py` commits.
 - Company-level data only — no candidate/recruiter personal data
   (CNIL).
 - Sourcing score ≠ ICP score: the score brick still runs on these rows.

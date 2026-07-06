@@ -4,7 +4,7 @@
 |---|---|
 | family | find |
 | target | companies (reads seeds, writes candidates) |
-| method | agent (pattern analysis + similarity search); subagents → staging, `db-writer` commits |
+| method | agent (pattern analysis + similarity search); subagents → staging, `db.py` commits |
 | cost | free to cheap — `search_engine` ~1 credit/query, or built-in web search |
 
 ## IN

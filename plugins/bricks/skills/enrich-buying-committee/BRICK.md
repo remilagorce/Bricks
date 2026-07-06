@@ -46,4 +46,4 @@
   source itself (LinkedIn = indexed snippets only, never logged-in).
 - One contact per company; dedup on (company_id + full_name).
 - SERP credits announced at volume (money gate §8); subagents write to
-  staging, `db-writer` commits.
+  staging, `db.py` commits.

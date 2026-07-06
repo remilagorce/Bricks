@@ -24,10 +24,10 @@ drift guardrail).
 
 ## Workflow
 
-1. **Load the seeds** — ask `db-writer`: "select companies where
-   segment='seed'". If none, ask the user ONE question: "Donne-moi 3 à 10
-   de tes meilleurs clients — nom + site si tu l'as — ou le chemin d'un CSV
-   (colonnes name,domain)." Commit them via `db-writer`: insert into
+1. **Load the seeds** — run `db.py select companies --where
+   "segment='seed'"` (§5). If none, ask the user ONE question: "Donne-moi 3
+   à 10 de tes meilleurs clients — nom + site si tu l'as — ou le chemin d'un
+   CSV (colonnes name,domain)." Commit them via `db.py add`: insert into
    `companies` with `segment='seed'`, `source=dictated|csv`, dedup on
    domain (no domain → insert only if the name is absent). A CRM export
    lands the same way — this skill never talks to a CRM itself.
@@ -48,8 +48,8 @@ drift guardrail).
 4. **Validate and commit** — from staging (or directly for small runs):
    keep only candidates with a real, live website; DROP any candidate
    whose domain belongs to a seed (customers never become prospects); then
-   `db-writer`: "insert these company rows, dedup on domain, source
-   `lookalike:<seed-domain>`". The dedup-on-insert also protects seed rows
+   `db.py add` these company rows, dedup on domain, source
+   `lookalike:<seed-domain>`. The dedup-on-insert also protects seed rows
    from being overwritten.
 5. **Close the run** — `memory/state.json` (seeds covered, queries used),
    one line in `NOTES.md` (the confirmed pattern), receipt: Y seeds →

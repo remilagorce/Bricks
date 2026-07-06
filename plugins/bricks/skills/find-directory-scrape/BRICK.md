@@ -4,7 +4,7 @@
 |---|---|
 | family | find |
 | target | companies |
-| method | MCP Bright Data (`scrape_as_markdown`, `scrape_batch`, `search_engine`) + agent extraction; subagents write to staging, `db-writer` commits |
+| method | MCP Bright Data (`scrape_as_markdown`, `scrape_batch`, `search_engine`) + agent extraction; subagents write to staging, `db.py` commits |
 | cost | cheap — ~1 Bright Data credit per page (free tier 5,000/month) |
 
 ## IN

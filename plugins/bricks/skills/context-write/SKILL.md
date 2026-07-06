@@ -9,7 +9,7 @@ user-invocable: false
 Takes one free-text sentence describing an ICP and writes it, structured,
 into the current workspace's `context/icp.md`, following the ICP schema
 verbatim. This is the one brick whose output is the context itself, not
-database rows: no `db-writer`, no `bricks.db` — just the markdown file the
+database rows: no `db.py`, no `bricks.db` — just the markdown file the
 other bricks read as their client brain. Called by `gtm-onboard`, never by
 the user directly.
 
@@ -19,7 +19,7 @@ Follow `${CLAUDE_PLUGIN_ROOT}/CONVENTIONS.md` §2: run
 `python3 "${CLAUDE_PLUGIN_ROOT}/tools/workspace.py" status`, `init` if
 needed, and work exclusively inside the returned `current.path`. The target
 file is `<current.path>/context/icp.md`. The FullEnrich gate (§4) and the
-`db-writer` agent (§5) do not apply here — this brick only edits markdown
+database rules (§5) do not apply here — this brick only edits markdown
 under `context/`.
 
 ## Input

@@ -46,11 +46,17 @@ exception: when the user already dictated the doctrine verbatim in
 `context/icp.md` ("Décideur type : le gérant"), restate the plan and
 proceed without blocking — their context IS the confirmation.
 
-## Phase 1 — The waterfall, per company (cheap first, verified always)
+## Phase 1 — The waterfall, in waves (§9: one rung × whole batch, cheap first, verified always)
 
 Select companies with `committee_status='pending'` (init the column on
-rows in scope, claim `running` via `db-writer` — absolute db path). For
-each, stop at the FIRST rung that yields a VERIFIED person:
+rows in scope, claim `running` via `db.py` — §5, pass `--db <absolute
+path>`). Run the rungs as WAVES across the whole batch, never as
+per-company waterfalls: wave A on every company at once, wave B only on
+A's unresolved companies, and so on — a company resolved in one wave
+never enters the next. Within a wave, all calls fire IN PARALLEL in one
+message; prefer the batch tool variant (`search_engine_batch`,
+`scrape_batch`) when several companies need the same rung. Stop-at-first-
+verified-hit still holds per company — it just happens between waves:
 
 - **A. Registry relay (free, instant)** — only when the target type is
   decision-maker AND the company is small: take the human in
@@ -73,7 +79,8 @@ the source itself. Ambiguity → next rung. Nothing after D → the fallback
 rule from the plan, else `committee_status='not_found'`. NEVER invent a
 person, never write an unverified one.
 
-**Write immediately** per company via `db-writer`: a `contacts` row —
+**Write per wave** via `db.py` (§5, one batched write as each wave
+completes): a `contacts` row per resolved company —
 `company_id` AND `company_name` (denormalized on purpose: the table is
 read by humans, a bare id is unreadable in the front), `full_name`,
 `role` (actual title), `role_type` (`decision-maker` | `champion`),
@@ -89,10 +96,12 @@ SCOPE (skip them in the selection), their `committee_status` stays
 
 ## Volume mode
 
-More than 10 companies: batches of 5-8 per subagent, up to 10 in
-parallel; subagents run rungs B-D and append candidates to
+Up to ~40 companies, the main thread's parallel waves are the fast
+path — no subagents (§9.5: each one is a cold start). Beyond ~40:
+batches of 5-8 per subagent, up to 10 in parallel; subagents run rungs
+B-D as waves and append candidates to
 `staging/committee-<date>/candidates.jsonl` (never touching the
-database); the main thread verifies and commits via `db-writer`.
+database); the main thread verifies and commits via `db.py`.
 Announce SERP credit usage before launching (money gate §8).
 
 ## Close the run
@@ -102,4 +111,4 @@ Announce SERP credit usage before launching (money gate §8).
 LinkedIn SERP (~Z credits), W via team pages. N not_found (fallback:
 <rule>). Group-owned companies skipped registry: [names]." Max 3 sample
 contacts. Next step: enrich (emails) on the new contacts, then
-write-sequence.
+write-outreach.

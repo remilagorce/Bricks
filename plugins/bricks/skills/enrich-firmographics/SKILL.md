@@ -22,8 +22,8 @@ later pass — say so in the receipt.
 
 ## Workflow
 
-1. **Scope and claim** — via `db-writer` (always with the absolute
-   `bricks.db` path): initialize `firmo_status='pending'` on the rows in
+1. **Scope and claim** — via `db.py` (§5, always with `--db <absolute
+   bricks.db>`): initialize `firmo_status='pending'` on the rows in
    scope (skip disqualified), then select up to 50 pending rows
    (`_id`, `name`, plus any locality hint available: `city`, `postal`,
    `domain`), then mark them `running`.
@@ -37,7 +37,7 @@ later pass — say so in the receipt.
    are looked up directly (exact match, no ambiguity), and a
    simplified-name retry (legal suffixes stripped) runs automatically
    before declaring `none`.
-3. **Commit pass 1** — hand `db-writer` the `high` results in one batch:
+3. **Commit pass 1** — write the `high` results in one `db.py modify` batch:
    `employees`, `industry`, `naf`, `siren`, `city`, `company_category`,
    `executives` (JSON string), `firmo_status='done'` — plus
    `parent_company` when present: the legal representative is a COMPANY
@@ -52,22 +52,25 @@ later pass — say so in the receipt.
      is a subsidiary (e.g. traqfood → Mérieux NutriSciences). Confirm the
      parent with a quick web check before flagging by name.
    Keep the `ambiguous` and `none` lists for the next passes.
-4. **Pass 2 — legal pages via Bright Data (~1 credit/row)** — for each
-   `ambiguous` AND each French-looking `none` row (trade names are often
-   not indexed by the registry — the legal name hides behind the brand):
-   `scrape_as_markdown` the company's legal page
-   (`https://<domain>/mentions-legales`, else find the footer link from
-   the homepage). French sites must publish their SIREN/SIRET there.
-   Extract it, then `firmo.py` with `"siren"` set → exact record, write
-   via `db-writer` (keep the brand as `name`, store the legal identity in
-   `legal_name`/`siren`).
-   No SIREN found → `firmo_status='not_found'`. More than 5 ambiguous
-   rows: delegate batches to subagents that write findings to
+4. **Pass 2 — legal pages via Bright Data (~1 credit/row), ONE wave
+   (§9)** — scope: every `ambiguous` AND every French-looking `none` row
+   (trade names are often not indexed by the registry — the legal name
+   hides behind the brand). Scrape ALL their legal pages in one
+   `scrape_batch` call (`https://<domain>/mentions-legales` for each;
+   misses retried via the footer link from the homepage, again batched
+   or parallel). French sites must publish their SIREN/SIRET there.
+   Extract them, then ONE batched `firmo.py --stdin` run with the
+   `"siren"` fields set → exact records, ONE `db.py` write (keep the
+   brand as `name`, store the legal identity in `legal_name`/`siren`).
+   No SIREN found → `firmo_status='not_found'`. Beyond ~40 such rows:
+   subagent batches per §9.5, findings to
    `staging/firmo-<date>/pass2.jsonl` (they never touch the database),
-   then commit via `db-writer`.
+   then commit via `db.py`.
 5. **Pass 3 — non-French or unmatched (`none`)** — likely foreign or
    renamed companies. Skim the site (Bright Data, else WebFetch) and
-   public LinkedIn results for an employees estimate and industry; write
+   public LinkedIn results — all rows' fetches in one wave
+   (`scrape_batch` / parallel calls, §9) — for an employees estimate
+   and industry; write
    them with `firmo_source='estimate'` so downstream skills know the
    grade. Never estimate `siren` or `executives` — official identifiers
    are real or absent. Nothing findable → `firmo_status='not_found'`.

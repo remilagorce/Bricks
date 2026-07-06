@@ -8,7 +8,7 @@ description: Complete existing contacts with verified role, seniority and Linked
 Completes KNOWN people. enrich-buying-committee decides WHO to hunt at a
 company; this brick takes contacts that already exist (CRM import, CSV,
 dictated lists, old rows) and fills the identity columns that
-write-sequence, scoring and signal-person need: `role`, `seniority`,
+write-outreach, scoring and signal-person need: `role`, `seniority`,
 `linkedin_url`. Every value is verified in its source or the row is
 `not_found` — never a guess. Contract in this directory's BRICK.md.
 
@@ -22,7 +22,7 @@ that is enrich-buying-committee's job; point the user there. FullEnrich
 (§4): not blocking — searches are free; if disconnected, rung A is
 skipped and the receipt says so.
 
-## The waterfall (per contact, cheap first, stop at first VERIFIED hit)
+## The waterfall, in waves (§9: one rung × whole batch, cheap first, stop at first VERIFIED hit)
 
 Select contacts with `profile_status='pending'` whose company is not
 disqualified — and not kill-rule-flagged either: until the score brick
@@ -32,14 +32,22 @@ Never claim-then-revert a flagged row; it simply never enters the
 claim. Rows with `left_company=1` (signal-person's verdict: the person
 moved to another company) are out of scope too — their identity
 columns describe who the person was at THIS company and stay frozen.
-Init the column on rows in scope, claim `running` via
-`db-writer` — absolute db path.
+Init the column on rows in scope, claim `running` via `db.py` (§5,
+pass `--db <absolute path>`). Execution is by WAVES, never per contact:
+rung A fires for ALL contacts in scope in one parallel message (or one
+batch call), rung B only for A's misses, rung C for B's misses — a
+contact verified in one wave never enters the next. Stop-at-first-hit
+holds per contact, between waves.
 
-**Announce the paid budget ONCE, up front (§8)**: count the rows that
-could reach rungs B/C ("up to N contacts × 2 SERP queries → max ~2N
-credits"), flag the low-prior rows (see rung B), and get ONE explicit
-confirmation before the run starts — then never re-ask per contact.
-Rung A alone (everything resolvable for free) needs no gate.
+**Budget once, up front (§8)**: count the rows that could reach
+rungs B/C ("up to N contacts × 2 SERP queries → max ~2N credits"),
+flag the low-prior rows (see rung B). Worst case below the big-spend
+threshold (default 50 credits) → announce and PROCEED, no question;
+above it → ONE confirmation for the whole batch — then never re-ask
+per contact. Rung A alone (free) needs nothing. Chain
+GO: when this brick runs as a step the user already authorized in a
+multi-brick plan, its budget line was announced there — do not
+re-ask. The receipt ends with statements, never questions.
 
 - **A. FullEnrich people search (free — searches cost 0 credits)** —
   search `person_names` = full_name + `current_company_domains` (or
@@ -89,7 +97,8 @@ FullEnrich's value verbatim; other rungs derive conservatively from the
 title (C-level / VP / Head / Director / Manager / Senior / Entry) —
 when the title does not say, leave `seniority` empty rather than guess.
 
-**Write immediately** per contact via `db-writer`: `role`, `seniority`,
+**Write per wave** via `db.py` (§5, one batched write as each wave
+completes), per contact: `role`, `seniority`,
 `linkedin_url`, `profile_source` (`fullenrich-search` | `linkedin-serp` |
 `team-page` | `linkedin-record`), then `profile_status='done'`. Never
 overwrite a non-empty `role`/`linkedin_url` with a weaker-rung value.
@@ -101,10 +110,11 @@ adding people is enrich-buying-committee's job.
 
 ## Volume mode
 
-More than 10 contacts: batches of 5-8 per subagent, up to 10 in
-parallel; subagents run rungs A-C and append candidates to
+Up to ~40 contacts, the main thread's parallel waves are the fast path —
+no subagents (§9.5). Beyond ~40: batches of 5-8 per subagent, up to 10
+in parallel; subagents run rungs A-C as waves and append candidates to
 `staging/profile-<date>/candidates.jsonl` (never touching the database);
-the main thread verifies and commits via `db-writer`. The single
+the main thread verifies and commits via `db.py`. The single
 upfront budget announcement covers the whole run — subagents never
 spend beyond it.
 
@@ -113,5 +123,5 @@ spend beyond it.
 `memory/state.json` (counts per rung), one `NOTES.md` line, receipt:
 "Profiles: X via FullEnrich search (free), Y via LinkedIn SERP (~Y
 credits), Z via team/press pages. N not_found." Max 3 sample rows. Next
-steps: enrich (emails) → write-sequence; signal-person can now watch the
+steps: enrich (emails) → write-outreach; signal-person can now watch the
 new `linkedin_url` rows.

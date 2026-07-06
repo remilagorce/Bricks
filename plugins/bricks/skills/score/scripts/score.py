@@ -3,7 +3,7 @@
 
 File in → file out. Zero LLM, zero network, zero database: this script
 never touches bricks.db (committing scores back is a separate, atomic
-step done by db-writer, outside this skill). Judgment-based measures are
+step done via db.py, outside this skill). Judgment-based measures are
 materialized as columns BEFORE this script runs (materialize.py) — by
 the time `apply` executes, scoring is pure arithmetic: same file + same
 spec = same output, forever, explainable to a jury.
@@ -46,7 +46,7 @@ Semantics:
   the required column is empty → partial score + score_status='missing_input'.
 - kill: first matching rule sets killed='true' + kill_reason. The row is
   still scored (it is free); acting on `killed` is the committer's job
-  (killed → status='disqualified' happens at commit time, via db-writer).
+  (killed → status='disqualified' happens at commit time, via db.py).
 - Conditions: {"col","op","value"} with op in eq ne lt lte gt gte
   contains icontains in regex exists missing — or combinators
   {"all": [...]}, {"any": [...]}, {"not": {...}}.

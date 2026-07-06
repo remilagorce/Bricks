@@ -20,11 +20,9 @@ plugins/bricks/
     transform/SKILL.md            #   clean/dedupe/score/filter tables
     scan-mentions/SKILL.md        #   answer one question about a site
     interface/SKILL.md            #   launch the local web UI
-  agents/
-    db-writer.md                  # the only agent allowed to touch bricks.db
   tools/
     workspace.py                  # workspace lifecycle (bricks/config.json)
-    db.py                         # the only door to bricks.db (used by db-writer)
+    db.py                         # the only door to bricks.db (called directly by skills)
     session_start.py              # SessionStart hook: injects workspace banner
   front/                          # local web UI (server.py + index.html)
   templates/context/              # scaffolded into new workspaces (offer.md, icp.md, personas/)
@@ -39,21 +37,25 @@ holds only the plumbing (workspace lifecycle, database access) that skills
 call into. When adding a new brick, add a new skill directory — do not grow
 an existing skill to cover an unrelated capability.
 
-## Rule 2 — database writes go through the `db-writer` agent
+## Rule 2 — database access goes straight through `db.py`
 
-No skill calls `tools/db.py` itself. Every read and write to `bricks.db` is
-delegated, in natural language, to the `db-writer` subagent
-(`plugins/bricks/agents/db-writer.md`): "insert these rows, dedup on
-domain", "claim 25 pending rows", "write employees=120 for id 3".
+Every read and write to `bricks.db` goes through `tools/db.py`, called
+**directly** with the `Bash` tool (`add`, `select`, `modify`, `remove`…),
+exactly like the other plumbing (`workspace.py`, `firmo.py`). No subagent
+sits in between: `db.py` is deterministic, injection-safe and prints JSON
+receipts, so there is no judgment to delegate — a `db-writer` agent would
+only add a full model round-trip per call, and per-row database dispatches
+were the single biggest source of run slowness (this cost us minutes of
+pure JSON-shuttling on every enrichment run).
 
-`db-writer` is the single place that holds `db.py`'s exact CLI contract.
-That is deliberate: a `SKILL.md` describing a tool's flags in prose is a
-contract that can silently drift from the tool's real interface as it
-evolves. Centralizing that knowledge in one agent means only one file to
-keep in sync with `tools/db.py` — not every skill that touches data. See
-`CONVENTIONS.md` §5 for the full status vocabulary and iron rules
-`db-writer` enforces (mark `running` before working, write immediately,
-never dump raw tables into the conversation).
+The exact CLI contract lives in ONE place — `CONVENTIONS.md` §5 — not
+duplicated across skills. That is deliberate: a `SKILL.md` describing a
+tool's flags in prose is a contract that can silently drift from the tool's
+real interface. A skill says "write results to the DB per CONVENTIONS §5";
+the main thread applies the matching command. Change `db.py` and §5
+together, in the same commit. §5 also holds the status vocabulary and the
+iron rules (mark `running` before working, write immediately, never dump
+raw tables into the conversation). Always pass `--db <absolute bricks.db>`.
 
 ## Running things end to end
 
@@ -87,7 +89,7 @@ write a workflow:
   pipeline you need to run the same way every time (Claude could match a
   different skill if you phrase a step differently).
 - **Dispatch (explicit invocation)** — you (or a workflow) name the exact
-  agent to run, by name (`@db-writer`, `@find`, ...), instead of letting
+  agent to run, by name (`@find`, `@enrich`, ...), instead of letting
   Claude choose. Deterministic: the same workflow step always calls the
   same agent. Workflows should dispatch explicitly, step by step, rather
   than describing steps in prose and hoping Claude picks the right skill

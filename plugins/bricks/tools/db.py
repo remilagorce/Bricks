@@ -28,6 +28,7 @@ CLI (JSON on stdout; on error JSON on stderr + exit 1):
     python3 db.py schema  <table>
     python3 db.py select  <table> [--where SQL] [--cols a,b] [--limit N] [--offset N] [--order SQL]
     python3 db.py count   <table> [--where SQL]
+    python3 db.py claim   <table> <status_col> [--limit 25] [--cols a,b] [--where SQL] [--retry-failed]
     python3 db.py add     <table> --rows '[{"name": "Acme"}]'        [--key domain]
     python3 db.py modify  <table> --updates '[{"_id": 3, "score": "A"}]'
     python3 db.py modify  <table> --set website_status=running --where "website_status='pending'"
@@ -306,6 +307,78 @@ def count(path: str, table: str, where: str | None = None) -> dict:
     finally:
         conn.close()
     return {"ok": True, "table": table, "count": total}
+
+
+def claim(path: str, table: str, status_col: str, limit: int = 25,
+          cols: str | None = None, where: str | None = None,
+          retry_failed: bool = False) -> dict:
+    """Atomically select up to `limit` pending rows and mark them running.
+
+    One command instead of the select-then-modify pair, inside a single
+    BEGIN IMMEDIATE transaction: the write lock is taken BEFORE the select,
+    so two parallel runs can never claim the same rows (the two-step
+    pattern had that race). Rows whose row-level `status` is
+    'disqualified' are never claimed (§5/§8); `--retry-failed` widens the
+    scope to 'failed' rows on an explicit retry (iron rule 2).
+    """
+    _check_ident(status_col, "column name")
+    if limit <= 0:
+        raise DbError("--limit must be a positive integer")
+    conn = connect(path)
+    try:
+        _require_table(conn, table)
+        existing = _columns(conn, table)
+        if status_col not in existing:
+            raise DbError(f"column {status_col!r} not found in {table} — "
+                          f"initialize it to 'pending' first (columns: {sorted(existing)})")
+        if cols:
+            names = [_check_ident(c.strip(), "column name") for c in cols.split(",") if c.strip()]
+            unknown = [c for c in names if c not in existing]
+            if unknown:
+                raise DbError(f"unknown column(s) {unknown} in {table} — columns: {sorted(existing)}")
+            if ID_COLUMN not in names:
+                names.insert(0, ID_COLUMN)
+            selection = ", ".join(_q(c) for c in names)
+        else:
+            selection = "*"
+        statuses = "('pending','failed')" if retry_failed else "('pending')"
+        cond = f"{_q(status_col)} IN {statuses}"
+        if "status" in existing:
+            cond += " AND (status IS NULL OR status!='disqualified')"
+        extra = _check_where(where)
+        if extra:
+            cond += f" AND ({extra})"
+
+        old_isolation = conn.isolation_level
+        conn.isolation_level = None  # manual transaction: BEGIN IMMEDIATE
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+            try:
+                ids = [r[ID_COLUMN] for r in conn.execute(
+                    f"SELECT {_q(ID_COLUMN)} FROM {_q(table)} WHERE {cond} "
+                    f"ORDER BY {_q(ID_COLUMN)} LIMIT ?", (int(limit),))]
+            except sqlite3.Error as exc:
+                raise DbError(f"claim failed ({exc}) — condition was: {cond}") from None
+            rows = []
+            if ids:
+                placeholders = ",".join("?" * len(ids))
+                conn.execute(
+                    f"UPDATE {_q(table)} SET {_q(status_col)}='running' "
+                    f"WHERE {_q(ID_COLUMN)} IN ({placeholders})", ids)
+                rows = [dict(r) for r in conn.execute(
+                    f"SELECT {selection} FROM {_q(table)} "
+                    f"WHERE {_q(ID_COLUMN)} IN ({placeholders}) "
+                    f"ORDER BY {_q(ID_COLUMN)}", ids)]
+            conn.execute("COMMIT")
+        except BaseException:
+            conn.execute("ROLLBACK")
+            raise
+        finally:
+            conn.isolation_level = old_isolation
+    finally:
+        conn.close()
+    return {"ok": True, "action": "claim", "table": table,
+            "statusCol": status_col, "claimed": len(rows), "rows": rows}
 
 
 def add(path: str, table: str, rows: list[dict], key: str | None = None) -> dict:
@@ -599,6 +672,15 @@ def main(argv=None) -> int:
     p.add_argument("table")
     p.add_argument("--where", default=None)
 
+    p = sub.add_parser("claim", help="atomically select pending rows and mark them running")
+    p.add_argument("table")
+    p.add_argument("status_col", help="the X_status column to claim on")
+    p.add_argument("--limit", type=int, default=25, help="max rows to claim (default 25)")
+    p.add_argument("--cols", default=None, help="columns to return (always includes _id)")
+    p.add_argument("--where", default=None, help="extra SQL condition ANDed to the claim")
+    p.add_argument("--retry-failed", action="store_true",
+                   help="also claim 'failed' rows (explicit retry)")
+
     p = sub.add_parser("add", help="insert rows; creates table/columns as needed")
     p.add_argument("table")
     p.add_argument("--rows", required=True, help="JSON list of objects, or '-' for stdin")
@@ -646,6 +728,9 @@ def main(argv=None) -> int:
                             args.limit, args.offset, args.order)
         elif args.command == "count":
             result = count(path, args.table, args.where)
+        elif args.command == "claim":
+            result = claim(path, args.table, args.status_col, args.limit,
+                           args.cols, args.where, args.retry_failed)
         elif args.command == "add":
             result = add(path, args.table, _load_json(args.rows, "--rows"), args.key)
         elif args.command == "modify":

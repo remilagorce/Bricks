@@ -4,7 +4,7 @@
 |---|---|
 | family | enrich (company level) |
 | target | companies |
-| method | script (`tools/firmo.py` → official French government API) + Bright Data for disambiguation/estimates; writes via `db-writer` |
+| method | script (`tools/firmo.py` → official French government API) + Bright Data for disambiguation/estimates; writes via `db.py` |
 | cost | free (pass 1, unlimited) · ~1 Bright Data credit per ambiguous/foreign row (passes 2-3) |
 
 ## IN
@@ -46,4 +46,4 @@
 - Kill-rule matches (size/country) are FLAGGED in the receipt, never
   silently disqualified — that is the score skill's job.
 - Idempotent re-runs via `firmo_status`; subagent findings go through
-  staging, `db-writer` commits.
+  staging, `db.py` commits.

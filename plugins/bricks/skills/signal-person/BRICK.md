@@ -34,7 +34,7 @@
   refreshes role/seniority. A company CHANGE never relays: it sets
   `left_company=1`, the row's identity columns stay frozen (they
   describe who the person was at THIS company), and person-profile +
-  write-sequence exclude the row; following the person to the new
+  write-outreach exclude the row; following the person to the new
   company is the user's call.
 - Only `fresh` (≤ 60 days) signals are icebreaker material downstream;
   `context` ones are background, never presented as news.

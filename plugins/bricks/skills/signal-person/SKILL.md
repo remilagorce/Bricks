@@ -20,8 +20,10 @@ Follow `${CLAUDE_PLUGIN_ROOT}/CONVENTIONS.md` §2 and §3. Column relay:
 contacts need `linkedin_url` for passes 1-2 (run enrich-person-profile
 or enrich-buying-committee first) and a resolvable company for pass 3.
 Scope: when a `tier` column exists (score brick), default to tier A/B
-only; otherwise state the scope ("N contacts with a linkedin_url") and
-confirm with the user before any PAID pass. Contacts of disqualified
+only; otherwise state the scope ("N contacts with a linkedin_url").
+Paid passes follow §8: below the big-spend threshold (default 50
+credits) they run announced-but-unasked; above it, one grouped GO
+covers all passes of the run. Contacts of disqualified
 companies are never scanned (§8.5) — and kill-rule flags recorded in
 `memory/NOTES.md` / `state.json` exclude a company the same way until
 the score brick ships. FullEnrich (§4) gates pass 1 only.
@@ -34,12 +36,16 @@ can force a full re-scan). The window applies PER PASS:
 `memory/state.json` logs which passes each scan ran, and a pass that
 never ran on a row is always due — one pass's stamp never blocks
 another (field-tested: a morning job-change scan must not mute an
-afternoon hiring sweep). Claim `running` via `db-writer` (absolute db
-path). Every scanned row gets `signal_checked_at` stamped, found or not.
+afternoon hiring sweep). Claim `running` via `db.py` (§5, pass `--db
+<absolute path>`). Every scanned row gets `signal_checked_at` stamped, found or not.
 Signals are append-only, deduped on `sig_key` — re-runs never duplicate
 a signal already seen.
 
 ## The passes (cheap first; each announced, each optional)
+
+Each pass runs as ONE wave over its whole scope (§9): passes 3-4 are
+already batched by their scripts; for passes 1-2, fire every contact's
+lookup IN PARALLEL in a single message — never one contact at a time.
 
 - **Pass 1 — job change (FullEnrich search, FREE — searches cost 0
   credits)**: look each contact up by `person_linkedin_urls` (fallback:
@@ -62,8 +68,9 @@ a signal already seen.
   Person absent from FullEnrich → no verdict (absence of data is not a
   signal).
 - **Pass 2 — recent posts (Bright Data `web_data_linkedin_posts`, pro
-  tools, per-record cost)**: PAID — explicit confirmation first (§8):
-  "N contacts × 1 record", hard cap 25 per run. Pull the contact's
+  tools, per-record cost)**: PAID — §8 ("N contacts × 1 record"
+  announced; the big-spend threshold decides whether to ask), cap 25
+  per run. Pull the contact's
   recent public posts, keep those newer than `signal_checked_at` (first
   scan: last 30 days). Signal `new_post`: the topic in one line + the
   angle it offers against `context/offer.md`, `evidence_url` = the post
@@ -133,12 +140,12 @@ and a `freshness` verdict computed at detection: ≤ 60 days old =
 lands); older = `context` — useful background on the account, but
 never presented as news (the fixture's 9-month-old move congratulated
 as fresh is exactly the bot-smell we refuse). Downstream consumers
-(write-sequence) re-check `date` at write time; `freshness` is the
+(write-outreach) re-check `date` at write time; `freshness` is the
 at-detection verdict that makes the split visible in the table.
 
-## Writes (immediately, per contact)
+## Writes (per wave, batched — §9.4)
 
-`signals` table via `db-writer` (`--key sig_key`): `contact_id` +
+`signals` table via `db.py` (§5, `--key sig_key`): `contact_id` +
 `contact_name` (person-level kinds; empty for company-level ones),
 `company_id`, `company_name` (denormalized — the table is read by
 humans), `kind` = `job_change` | `new_post` | `hiring` |
@@ -159,15 +166,16 @@ offers are distinct signals),
 short human line for the table view), `signal_status`,
 `signal_checked_at`; on a company change additionally `left_company=1`
 (pass 1). At volume, group writes in batches of 5-8 through staging
-(§6) — one `db-writer` dispatch per batch, never one per row: the
+(§6) — one `db.py` write per batch, never one per row: the
 per-row dispatch overhead is what makes runs feel slow.
 
 ## Volume mode
 
-More than 10 contacts: batches of 5-8 per subagent, up to 10 in
-parallel; subagents append raw findings to
+Up to ~40 contacts, the main thread's parallel waves are the fast
+path — no subagents (§9.5). Beyond ~40: batches of 5-8 per subagent, up
+to 10 in parallel; subagents append raw findings to
 `staging/signals-<date>/raw.jsonl`; the main thread verifies (source URL
-present, dates sane, dedup) and commits via `db-writer`. Paid passes
+present, dates sane, dedup) and commits via `db.py`. Paid passes
 announced before launching, per pass (§8).
 
 ## Close the run
@@ -177,7 +185,10 @@ announced before launching, per pass (§8).
 context), Y hiring, Z posts, W news items. N contacts quiet
 (not_found). Moves: [names] — rows frozen (`left_company=1`),
 follow-up at the new company is your call. FRESH signals are
-icebreaker material — run write-sequence on those contacts next." Max 3
-sample rows. Cadence: on-demand today; a scheduled `claude -p "check les
+icebreaker material — run write-outreach on those contacts next." Max 3
+sample rows. The receipt ENDS the run — next steps are statements,
+never "veux-tu… ?" questions; a chain GO given upfront (several
+bricks authorized in one plan) flows to the next receipt without
+asking. Cadence: on-demand today; a scheduled `claude -p "check les
 signaux"` run is the natural next step (same pattern as signal-sillage);
 real-time is cockpit V2.

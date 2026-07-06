@@ -103,38 +103,42 @@ your tool list:
   - Otherwise (workspace ops, transform, interface) → warn once and
     continue; the task does not depend on FullEnrich.
 
-## 5. Database rules — delegate to the db-writer agent
+## 5. Database rules — call db.py directly
 
 Each workspace has one SQLite database, `bricks.db` (WAL mode: parallel
 writers can work safely). **Every** read and write goes through
-`tools/db.py` — but skills do not call it themselves. Skills delegate the
-operation, in natural language, to the **`db-writer` agent**
-(`agents/db-writer.md`): "insert these company rows, dedup on domain",
-"claim 25 pending rows for employees_status", "write employees=120 for id
-3". `db-writer` is the single place that knows `db.py`'s exact CLI —
-keeping that knowledge in one file instead of duplicated across every
-`SKILL.md` is the whole point: change the tool and the agent together,
-instead of hunting down every skill that embeds an example command.
+`tools/db.py` — called **directly**, following the contract below. No
+subagent sits between a skill and the database: `db.py` is deterministic,
+injection-safe and already prints JSON with counts, so there is nothing to
+delegate to a model. Run it with the `Bash` tool like any other Bricks
+plumbing (`workspace.py`, `firmo.py`, `jobs.py`…): describe the write to
+the user in one line, run the command, relay its JSON receipt.
+
+This section IS the single source of truth for `db.py`'s CLI. Keeping the
+contract in one file (here, referenced by every skill) instead of embedding
+example commands in each `SKILL.md` is the whole point: change the tool and
+this section together, in the same commit. A skill author does not memorize
+flags — a skill says "write results to the DB per CONVENTIONS §5" and the
+main thread applies the matching command from the reference below.
 
 Never raw `sqlite3`, never hand-rolled SQL in the conversation, never any
-tool other than `db-writer` touching `bricks.db`. `db.py` resolves the
-current workspace automatically (it reads `bricks/config.json`). Every
-command prints JSON; a non-zero exit code means the database was NOT
-modified — `db-writer` reports that back plainly, never retries blindly.
+tool other than `db.py` touching `bricks.db`. `db.py` resolves the current
+workspace automatically (it reads `bricks/config.json`). Every command
+prints JSON; a non-zero exit code means the database was NOT modified —
+read the JSON error on stderr and report it plainly, never retry blindly.
 
-**Always hand `db-writer` the absolute database path** (the current
-workspace's `bricks.db`, from `workspace.py status`) in the delegation
-message. Subagents do not reliably inherit the session's working directory;
-the explicit path makes every write land in the right database no matter
-where the agent runs from.
-
-The reference below is `db-writer`'s own contract with the tool — read it
-if you are implementing or debugging `db-writer` itself, or `db.py`. A
-skill author does not need to memorize this; describe the intent and let
-`db-writer` translate it.
+**Always pass the absolute database path** with `--db <path>` (the current
+workspace's `bricks.db`, from `workspace.py status`). When a skill delegates
+a batch to a subagent (volume mode: parallel find/enrich workers), those
+subagents write their RAW findings to `staging/` only — the main thread
+resolves the path once and does every `db.py` write itself, so a write can
+never land in the wrong database because a subagent didn't inherit the cwd.
 
 Tables and columns are dynamic, Clay-style — `add` creates the table on
 first use, `add`/`modify` create missing columns on the fly:
+
+Every command below takes `--db <absolute path to bricks.db>` (omitted from
+the examples for readability — never omit it in a real call).
 
 ```bash
 # Insert rows (creates table/columns as needed); --key dedups on a column
@@ -145,11 +149,20 @@ python3 "${CLAUDE_PLUGIN_ROOT}/tools/db.py" add companies \
 python3 "${CLAUDE_PLUGIN_ROOT}/tools/db.py" select companies \
   --where "employees_status='pending'" --cols _id,domain --limit 50
 
+# Count without reading rows
+python3 "${CLAUDE_PLUGIN_ROOT}/tools/db.py" count companies --where "status!='disqualified'"
+
+# Claim work: atomically select up to N pending rows AND mark them running
+# (one command instead of select + modify; disqualified rows never claimed;
+#  --retry-failed widens to 'failed' rows on an explicit retry)
+python3 "${CLAUDE_PLUGIN_ROOT}/tools/db.py" claim companies employees_status \
+  --limit 25 --cols _id,name,domain
+
 # Update cells by _id (all-or-nothing; unknown columns created automatically)
 python3 "${CLAUDE_PLUGIN_ROOT}/tools/db.py" modify companies \
   --updates '[{"_id": 3, "employees": 120, "employees_status": "done"}]'
 
-# Bulk claim / bulk set (requires --where)
+# Bulk claim / bulk set (requires --where; use --where 1=1 to really target all rows)
 python3 "${CLAUDE_PLUGIN_ROOT}/tools/db.py" modify companies \
   --set employees_status=running --where "_id IN (3,4,5)"
 
@@ -157,13 +170,18 @@ python3 "${CLAUDE_PLUGIN_ROOT}/tools/db.py" modify companies \
 python3 "${CLAUDE_PLUGIN_ROOT}/tools/db.py" remove companies --ids '[3, 7]'
 python3 "${CLAUDE_PLUGIN_ROOT}/tools/db.py" remove companies --where "status='disqualified'"
 
-# Inspect / import
+# Inspect
 python3 "${CLAUDE_PLUGIN_ROOT}/tools/db.py" tables
+python3 "${CLAUDE_PLUGIN_ROOT}/tools/db.py" schema companies
+
+# Import a CSV / drop a column / drop a whole table (drop-table is irreversible)
 python3 "${CLAUDE_PLUGIN_ROOT}/tools/db.py" import-csv companies <exported-list.csv> --key domain
+python3 "${CLAUDE_PLUGIN_ROOT}/tools/db.py" drop-column companies stale_col
+python3 "${CLAUDE_PLUGIN_ROOT}/tools/db.py" drop-table staging --confirm
 ```
 
 For large payloads, pass `--rows -` / `--updates -` / `--ids -` and pipe
-the JSON via stdin.
+the JSON via stdin instead of an inline argument.
 
 - **`_id` is the reserved technical column** (INTEGER PRIMARY KEY):
   generated by the database, never set, never modified, never displayed —
@@ -195,16 +213,19 @@ approval is a human act, and nothing leaves the machine without it.
 
 ### The three iron rules
 
-1. Mark `running` (bulk `--set` on the claimed `_id`s) BEFORE working;
-   write each result and its final status IMMEDIATELY after each row —
-   never batch-write at the end. An interrupted run must lose at most one
-   row of work.
-2. Select work with `WHERE <col>_status='pending' AND status!='disqualified'`
-   (re-runs add `OR <col>_status='failed'`). Re-running a skill must never
-   reprocess `done` rows — idempotence by statuses, no separate cursor
-   needed for row-by-row work.
+1. Mark `running` BEFORE working — `db.py claim` does select + mark in
+   ONE atomic command (preferred: two parallel runs can never claim the
+   same rows); write results and their final status as soon as they
+   land — one `db.py` write per row for serial work, ONE write per
+   completed wave for parallel work (§9) — never accumulate a whole run
+   and write at the end. An interrupted run must lose at most one row or
+   one wave of work.
+2. Work selection is what `claim` encodes: `<col>_status='pending'` AND
+   not disqualified (an explicit retry adds `--retry-failed`).
+   Re-running a skill must never reprocess `done` rows — idempotence by
+   statuses, no separate cursor needed for row-by-row work.
 3. Data flows through the database, never through the conversation. Skills
-   ask `db-writer` to write results as they arrive and relay its receipts:
+   run the `db.py` write as results arrive and relay its JSON receipt:
    counts and at most 3 sample rows. Never dump tables into the chat.
 
 ## 6. Staging: raw payloads before commit
@@ -227,22 +248,79 @@ staging and write the database directly.
 - `memory/NOTES.md` — free-form, human-read: decisions, context, open
   questions. Append at the bottom, newest last. Never rewrite history.
 
-## 8. Paid actions — the money gate
+## 8. Paid actions — the big-spend gate
 
-Applies to ANY action that consumes credits or money: FullEnrich enrichment
-and exports, Bright Data requests at volume, any metered API. The protocol,
-in order, no exceptions:
+Applies to ANY action that consumes credits or money: FullEnrich
+enrichment and exports, Bright Data requests, any metered API. One
+principle: **full autonomy, except when a lot of credits are about to
+go out at once** — that, and only that, gets ONE question.
 
-1. **Preview free first** when the provider offers it (FullEnrich search
-   returns 10 results + total count at no cost; a single Bright Data page
-   scout costs 1 credit).
-2. **Announce before spending**: the exact volume, the unit cost, and the
-   estimated total ("N contacts × 1 credit each").
-3. **Explicit confirmation** from the user. Silence is not consent.
-4. **Hard caps without an explicit override**: 50 paid enrichments, 100
-   sourced candidates, 10 scraped pages per run.
-5. **Never spend on the dead**: rows with `status='disqualified'` (or whose
-   parent company is disqualified) never consume a credit again.
-6. **Never pay twice**: statuses make re-runs skip `done` rows; async
+1. **Free first, always**: free lanes and deterministic scripts
+   (`tools/*.py`) before paid ones; provider previews when they exist
+   (FullEnrich searches are free; one Bright Data control query = 1
+   credit).
+2. **Autonomy by default**: paid work below the big-spend threshold
+   runs with NO confirmation — the plan is announced in a line as it
+   starts, and the receipt shows the actual spend plus the session's
+   cumulative total. Transparency after, not permission before. No
+   per-run or per-week accounting, no envelope bookkeeping.
+3. **The big-spend threshold**: default **50 credits for one
+   batch/action**. The user changes it by just saying so ("seuil à
+   100") — persisted as `spend_threshold` in `memory/state.json`.
+   Above it → ONE grouped authorization phrased as the batch it
+   covers, fallbacks included ("les ~100 prochains contacts ≈ 100
+   crédits, FullEnrich d'abord, scrape en fallback — GO ?"). Once
+   given, it covers the whole batch; only exceeding the AUTHORIZED
+   amount comes back to the user.
+4. **Never spend on the dead**: rows with `status='disqualified'` (or
+   whose parent company is disqualified) never consume a credit again.
+5. **Never pay twice**: statuses make re-runs skip `done` rows; async
    job/batch ids live in `memory/state.json` (§6) so an interrupted run
    fetches results instead of re-submitting.
+6. **Business inputs are not money gates**: strategy, matrices, voice,
+   signature are asked ONCE per workspace, grouped in a single block,
+   persisted — never re-asked while `context/` is unchanged. Receipts
+   end with statements, never questions.
+
+## 9. Parallelism — waves, not rows
+
+The slow shape is the sequential waterfall: finish row 1 (rung A → B →
+C), then row 2, then row 3… Every network call costs seconds; serializing
+N rows makes the run linear in N. The fast shape is the WAVE: run ONE
+rung across the whole batch at once, then run the next rung only on the
+rows the previous wave left unresolved. N sequential waterfalls become
+~3 parallel waves — same rungs, same verification rule, same cost order.
+
+1. **One rung, whole batch, one message.** Independent tool calls (MCP
+   searches, scrapes, fetches) belonging to the same wave are fired IN
+   PARALLEL in a single message — never await one row's result before
+   firing the next row's call. Waiting is only legal BETWEEN waves
+   (wave B needs wave A's misses) or when one call's input depends on
+   another call's output.
+2. **Prefer the batch variant of a tool** when it exists: one call
+   carrying N inputs beats N parallel calls. FullEnrich `enrich_bulk`
+   (async job — store the job id in `memory/state.json`, §8.5) over
+   per-contact enrichment; Bright Data `search_engine_batch` over serial
+   `search_engine` queries, `scrape_batch` over serial
+   `scrape_as_markdown`. Same spend, one round-trip.
+3. **Cost order lives BETWEEN waves, not within a row**: wave A (free)
+   on all rows in scope → wave B (paid) only on A's misses → wave C on
+   B's misses. §8 is untouched — cheap first still holds, per wave, and
+   the upfront budget announcement covers the worst case exactly as
+   before.
+4. **Write per wave** (iron rule 1): claim `running` on the batch, then
+   ONE `db.py` write per completed wave — not one per row (dispatch
+   overhead), not one at the end of the run (interruption loses
+   everything).
+5. **Subagents are for volume, not for structure.** Each subagent is a
+   cold start that re-derives context — below ~40 rows, parallel waves
+   in the main thread beat spawning workers. Above ~40 rows: subagent
+   batches (5-8 rows each, up to 10 in parallel) that run the waves and
+   append findings to `staging/` (§6); the main thread verifies and
+   commits. Subagents never write the database and never spend beyond
+   the announced budget.
+6. **Progress lives in statuses, never in mid-run displays.** The front
+   reads the database live — a column updates in the UI when its wave
+   commits. Never pause a run to show intermediate tables in the chat,
+   never wait for the user mid-wave: one announcement at start, receipts
+   at the end (§8).

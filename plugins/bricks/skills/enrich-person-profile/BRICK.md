@@ -52,7 +52,7 @@
   official records only.
 - Paid budget announced ONCE up front (max ~2 credits per row that can
   reach rungs B/C), one explicit confirmation for the whole run (§8);
-  subagents write to staging, `db-writer` commits.
+  subagents write to staging, `db.py` commits.
 - Low-presence prior: no-domain artisan/tiny companies make rung B
   opt-in — default skip, registry title → seniority instead.
 - French legal titles (gérant, président, PDG, DG, founder as registry

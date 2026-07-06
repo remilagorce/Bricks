@@ -14,7 +14,7 @@ intermediate `sc_*` column per rule so the decomposition is visible.
 
 This skill is file-based by design: it NEVER touches `bricks.db`.
 Committing scores back to a workspace table is a separate, atomic step
-delegated to `db-writer` after the run (see Handoff).
+via `db.py` after the run (see Handoff).
 
 ## Before anything
 
@@ -34,8 +34,8 @@ per line):
   yourself.
 - **A file path** (CSV or JSONL, e.g. in /tmp or exported from the
   workspace) → convert CSV to JSONL; copy into the run dir.
-- **Workspace rows** → ask `db-writer` to select the relevant
-  rows/columns (absolute db path), save its JSON output as the JSONL.
+- **Workspace rows** → run `db.py select` (§5, pass `--db <absolute
+  path>`) for the relevant rows/columns, save its JSON output as the JSONL.
   Keep `_id` in the rows: the handoff needs it to modify by id.
 
 Do not invent columns; the file is scored as-is.
@@ -122,7 +122,7 @@ user can contest the judgment, not just the total.
 ## 5. Handoff — the database stays outside
 
 If the rows came from the workspace, propose committing the scores:
-delegate to `db-writer` (absolute db path) a `modify --updates` built
+run a `db.py modify --updates` (§5, pass `--db <absolute path>`) built
 from `scored.jsonl` (`_id` + score/tier/`sc_*` columns), and translate
 `killed='true'` into `status='disqualified'` (row-level kill, per the
 shared vocabulary §5 — downstream bricks never spend on these again).

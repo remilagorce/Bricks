@@ -5,14 +5,19 @@ Google News publishes public RSS feeds: free, no key, stdlib-parseable.
 One fetch per company returns dated, sourced articles. This tool fetches
 and filters them mechanically; RELEVANCE stays with the calling skill
 (homonyms are a judgment call — 'DUPIN' the roofer vs Dupin the senator),
-and database writes stay with db-writer. This tool NEVER touches
+and database writes go through db.py. This tool NEVER touches
 bricks.db: it only writes staging files.
 
 Used by: signal-person pass 4 (company news).
 
 Usage:
     python3 news.py --companies companies.json --out staging/news-<date> \
-        [--days 31] [--terms "levée,acquisition,ouverture"]
+        [--days 31] [--terms "levée,acquisition,ouverture"] [--workers 4]
+
+Fetches run in parallel (--workers) behind ONE shared rate limiter:
+request starts stay RATE_SLEEP apart (politeness to Google News is
+unchanged), network latencies overlap. Output files are identical to
+the serial version — results are assembled in input order.
 
 companies.json: [{"company_id": 3, "name": "ACME SARL", "location": "33"}]
 
@@ -28,12 +33,14 @@ warning=true when distress vocabulary matched (redressement, liquidation
 """
 
 import argparse
+import concurrent.futures
 import datetime
 import email.utils
 import html as htmllib
 import json
 import re
 import sys
+import threading
 import time
 import unicodedata
 import urllib.parse
@@ -56,6 +63,28 @@ WARN_TERMS = ["redressement judiciaire", "liquidation", "procédure collective",
               "dépôt de bilan", "plan social", "fermeture"]
 
 state = {"fetches": 0, "errors": []}
+_state_lock = threading.Lock()
+
+
+class RateLimiter:
+    """Shared token gate: parallel workers overlap network latency while
+    request starts stay `interval` apart process-wide."""
+
+    def __init__(self, interval):
+        self.interval = interval
+        self._lock = threading.Lock()
+        self._next_at = 0.0
+
+    def acquire(self):
+        with self._lock:
+            now = time.monotonic()
+            start = max(now, self._next_at)
+            self._next_at = start + self.interval
+        if start > now:
+            time.sleep(start - now)
+
+
+LIMITER = RateLimiter(RATE_SLEEP)
 
 
 def log(msg):
@@ -71,16 +100,18 @@ def norm(text):
 def fetch(url):
     for attempt in (1, 2):
         try:
+            LIMITER.acquire()  # all pacing lives here — callers never sleep
             req = urllib.request.Request(url, headers={
                 "User-Agent": UA, "Accept-Language": "fr-FR,fr;q=0.9"})
             with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:
                 data = resp.read()
-            state["fetches"] += 1
-            time.sleep(RATE_SLEEP)
+            with _state_lock:
+                state["fetches"] += 1
             return data
         except Exception as e:
             if attempt == 2:
-                state["errors"].append(f"{url} -> {e}")
+                with _state_lock:
+                    state["errors"].append(f"{url} -> {e}")
                 return None
             time.sleep(1.5)
 
@@ -99,7 +130,8 @@ def parse_items(xml_bytes):
     try:
         root = ET.fromstring(xml_bytes)
     except ET.ParseError as e:
-        state["errors"].append(f"rss parse -> {e}")
+        with _state_lock:
+            state["errors"].append(f"rss parse -> {e}")
         return []
     items = []
     for it in root.iter("item"):
@@ -132,15 +164,15 @@ def run(args):
     cutoff = TODAY - datetime.timedelta(days=args.days)
     all_items, verdicts, dropped_old = [], [], 0
 
-    for c in rows:
+    def scan(c):
         name = c.get("name", "")
         log(f"[news] {name}")
         xml_bytes = fetch(rss_url(name))
         items = parse_items(xml_bytes) if xml_bytes else []
-        kept = []
+        kept, dropped = [], 0
         for it in items:
             if not it["published"] or it["published"] < cutoff.isoformat():
-                dropped_old += 1
+                dropped += 1
                 continue
             blob = it["title"] + " " + it["_desc"]
             it.pop("_desc")
@@ -156,14 +188,22 @@ def run(args):
             kept.append(it)
         kept.sort(key=lambda i: i["published"], reverse=True)
         kept = kept[:MAX_PER_COMPANY]
-        all_items += kept
-        verdicts.append({
+        verdict = {
             "company_id": c.get("company_id"), "company_name": name,
             "found": len(kept),
             "freshest": kept[0]["published"] if kept else None,
             "verdict": "news" if kept else "quiet",
             "warning": any(i["warning"] for i in kept),
-        })
+        }
+        return kept, verdict, dropped
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=args.workers) as pool:
+        futures = [pool.submit(scan, c) for c in rows]
+        for future in futures:  # input order — output files stay deterministic
+            kept, verdict, dropped = future.result()
+            all_items += kept
+            verdicts.append(verdict)
+            dropped_old += dropped
 
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
@@ -196,6 +236,9 @@ def main():
     p.add_argument("--terms", default="",
                    help="comma-separated offer-relevant vocabulary "
                         "(default: built-in French GTM terms)")
+    p.add_argument("--workers", type=int, default=4,
+                   help="parallel fetches; the shared rate limiter keeps "
+                        "politeness (default 4)")
     run(p.parse_args())
 
 

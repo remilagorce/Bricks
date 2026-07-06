@@ -43,37 +43,40 @@ rows in the receipt (do not disqualify silently — confirm with the user).
 ## Workflow
 
 1. **Scope** — confirm with the user: which table, which rows (all or a
-   filter), which column(s), from which source. Ask `db-writer` for the
-   table's schema and a count of pending rows before committing to a plan.
+   filter), which column(s), from which source. Run `db.py schema` and
+   `db.py count` (CONVENTIONS §5) for the table's schema and pending count
+   before committing to a plan.
 
    FullEnrich consumes credits (~0.25/contact): announce the estimated
    cost before launching a bulk job and use the free previews to validate
    targeting.
 
-2. **Initialize the status column** (first run only) — ask `db-writer` to
-   set `X_status='pending'` on rows in scope that don't have it yet
-   (excluding disqualified rows).
+2. **Initialize the status column** (first run only) — run `db.py modify
+   --set X_status=pending --where …` (§5) on rows in scope that don't have
+   it yet (excluding disqualified rows).
 
-3. **Select and claim** — ask `db-writer` for a batch of pending rows
-   (`_id`, `domain`, limit ~25), then ask it to mark exactly those ids
-   `running` BEFORE you start working them.
+3. **Select and claim** — ONE command: `db.py claim <table> X_status
+   --limit 25 --cols _id,domain` (§5) atomically selects the pending
+   rows AND marks them `running` before you start working them.
 
-4. **Enrich and write immediately** — as each result arrives, ask
-   `db-writer` to write that one row's value(s) and final status
-   (`done` / `not_found` / `failed`) — never accumulate and write at the
-   end.
+4. **Enrich in waves, write per wave (§9)** — never one row at a time:
+   - **Batch tools first**: N contacts to enrich → ONE FullEnrich
+     `enrich_bulk` job (async — store the job id in `memory/state.json`
+     so an interrupted run fetches results later instead of paying
+     twice, §8.5). N pages to read → ONE Bright Data `scrape_batch`
+     call, not N `scrape_as_markdown` calls.
+   - **No batch variant** → fire the whole wave's calls IN PARALLEL in
+     one message (all the fetches, then all the fallbacks on misses).
+   - As each wave completes, ONE `db.py modify --updates` writes its
+     values and final statuses (`done` / `not_found` / `failed`).
 
    `not_found` is a result, not an error — write it as the status and
    leave the value empty. `failed` means retryable. Never fabricate.
-   For big volumes, delegate batches to subagents — and parallelize
-   properly: batches of 5-8 rows each, up to 10 subagents launched IN
-   PARALLEL (in one message), next wave when a batch returns. 24 rows =
-   4-5 parallel batches, not 3 big sequential-ish lots. Each subagent asks
-   `db-writer` itself for the writes — ALWAYS passing the absolute
-   `bricks.db` path (CONVENTIONS §5) — and returns ONLY counts.
-   FullEnrich bulk jobs are asynchronous: store the job id in
-   `memory/state.json` so an interrupted run fetches results later instead
-   of paying twice.
+   Above ~40 rows, switch to subagent batches per §9.5: 5-8 rows each,
+   up to 10 launched IN PARALLEL (in one message), findings appended to
+   `staging/` — the main thread does every `db.py` write itself (§5),
+   passing the absolute `bricks.db` path; subagents never touch the
+   database.
 
 5. **Close the run** — a re-run picks up `pending` (and `failed` on
    request) rows automatically; no cursor needed. Update

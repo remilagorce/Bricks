@@ -35,17 +35,16 @@ Follow the mandatory procedure in `${CLAUDE_PLUGIN_ROOT}/CONVENTIONS.md`
    page count, ~1 credit per page. Hard cap 10 pages / 200 entries per run
    without an explicit override.
 4. **Extract and commit**:
-   - ≤ 3 pages: extract as you go and ask `db-writer` to insert the rows —
-     "insert these company rows into `companies`, dedup on domain, source
-     `directory:<host>`". Entries with no external site: ask `db-writer`
-     to insert only if no row with the same name exists; NEVER invent a
-     domain.
+   - ≤ 3 pages: extract as you go and insert the rows with `db.py add
+     companies --key domain` (§5), source `directory:<host>`. Entries with
+     no external site: insert only if no row with the same name exists;
+     NEVER invent a domain.
    - > 3 pages: delegate page batches to subagents (general-purpose). Each
      subagent scrapes its pages and appends raw entries to
      `staging/find-directory-scrape-<date>/raw-results.jsonl`
      (CONVENTIONS §6) — subagents never touch the database. Back in the
      main thread: validate the staging file (dedup, live domains, rejects
-     to `rejected.jsonl` with reasons), then commit via `db-writer` in one
+     to `rejected.jsonl` with reasons), then commit via `db.py` in one
      batch. Page cursors go to `memory/state.json` so an interrupted run
      resumes where it stopped.
 5. **Optional second pass** — propose, never force: internal detail pages

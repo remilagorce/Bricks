@@ -3,11 +3,16 @@
 
 Free, no API key, official (recherche-entreprises.api.gouv.fr), rate limit
 7 req/s. Used by the enrich-firmographics skill. Fetch only: this tool
-NEVER touches bricks.db — results go through the db-writer agent.
+NEVER touches bricks.db — results are committed by the calling skill via db.py.
 
 Usage:
     python3 firmo.py --name "Fleux" [--hint "75004 fleux.com"]
     python3 firmo.py --stdin        # JSONL rows: {"_id": 3, "name": "...", "hint": "..."}
+
+`--stdin` runs lookups in parallel (`--workers`, default 6) behind ONE
+shared rate limiter: request starts stay RATE_SLEEP apart process-wide
+(the API limit is about request rate, not concurrency), while network
+latencies overlap. Results print in input order, one JSON per row.
 
 Output: one JSON object per input (JSONL on --stdin) with:
     confidence  high | ambiguous | none
@@ -18,16 +23,39 @@ Output: one JSON object per input (JSONL on --stdin) with:
 """
 
 import argparse
+import concurrent.futures
 import json
 import re
 import sys
+import threading
 import time
 import unicodedata
 import urllib.parse
 import urllib.request
 
 API = "https://recherche-entreprises.api.gouv.fr/search"
-RATE_SLEEP = 0.16  # stay under 7 req/s
+RATE_SLEEP = 0.16  # min interval between request STARTS — stays under 7 req/s
+
+
+class RateLimiter:
+    """Shared token gate: parallel workers overlap network latency while
+    request starts stay `interval` apart process-wide."""
+
+    def __init__(self, interval):
+        self.interval = interval
+        self._lock = threading.Lock()
+        self._next_at = 0.0
+
+    def acquire(self):
+        with self._lock:
+            now = time.monotonic()
+            start = max(now, self._next_at)
+            self._next_at = start + self.interval
+        if start > now:
+            time.sleep(start - now)
+
+
+LIMITER = RateLimiter(RATE_SLEEP)
 
 EFFECTIF = {
     "00": "0", "01": "1-2", "02": "3-5", "03": "6-9", "11": "10-19",
@@ -149,6 +177,7 @@ def fetch(q, extra=None):
     request = urllib.request.Request(
         f"{API}?{query}", headers={"User-Agent": "bricks-firmographics"}
     )
+    LIMITER.acquire()  # all pacing lives here — callers never sleep
     with urllib.request.urlopen(request, timeout=15) as response:
         return json.load(response).get("results", [])
 
@@ -167,13 +196,10 @@ def lookup(name, hint="", siren=""):
             return {"confidence": "none", "error": "siren not found"}
         results = fetch(name, postal_filter)
         if not results and postal_filter:
-            time.sleep(RATE_SLEEP)
             results = fetch(name)
         if not results and simplified(name) not in ("", normalize(name)):
-            time.sleep(RATE_SLEEP)
             results = fetch(simplified(name), postal_filter)
             if not results and postal_filter:
-                time.sleep(RATE_SLEEP)
                 results = fetch(simplified(name))
     except Exception as e:
         return {"confidence": "none", "error": f"api error: {e}"}
@@ -214,19 +240,20 @@ def main():
     parser.add_argument("--hint", default="")
     parser.add_argument("--stdin", action="store_true",
                         help="read JSONL rows {_id, name, hint} from stdin")
+    parser.add_argument("--workers", type=int, default=6,
+                        help="parallel lookups; the shared rate limiter keeps "
+                             "the process under the API limit (default 6)")
     args = parser.parse_args()
 
     if args.stdin:
-        for line in sys.stdin:
-            line = line.strip()
-            if not line:
-                continue
-            row = json.loads(line)
-            result = lookup(row.get("name", ""), row.get("hint", ""),
-                            row.get("siren", ""))
-            result["_id"] = row.get("_id")
-            print(json.dumps(result, ensure_ascii=False), flush=True)
-            time.sleep(RATE_SLEEP)
+        rows = [json.loads(line) for line in sys.stdin if line.strip()]
+        with concurrent.futures.ThreadPoolExecutor(max_workers=args.workers) as pool:
+            futures = [pool.submit(lookup, row.get("name", ""), row.get("hint", ""),
+                                   row.get("siren", "")) for row in rows]
+            for row, future in zip(rows, futures):
+                result = future.result()
+                result["_id"] = row.get("_id")
+                print(json.dumps(result, ensure_ascii=False), flush=True)
     elif args.name:
         print(json.dumps(lookup(args.name, args.hint), ensure_ascii=False))
     else:

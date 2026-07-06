@@ -18,7 +18,7 @@ run resumes from the checkpoint and only judges the gaps. scored.jsonl,
 by contrast, is rebuilt on every run — scoring is free.
 
 This script never touches bricks.db. Committing scores back to a
-workspace is a separate, atomic step (db-writer), outside this skill.
+workspace is a separate, atomic step (db.py), outside this skill.
 
 CLI (summary JSON on stdout, progress on stderr):
     python3 materialize.py run <work.jsonl> <spec.json>

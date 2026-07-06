@@ -24,7 +24,7 @@ Claude subscription). Nobody resells credits or tokens.
 │  find · enrich · transform · write · score · crm · signal …    │
 ├─ PLUMBING (the frozen contract) ───────────────────────────────┤
 │  workspace.py (multi-workspace lifecycle, staging, memory)     │
-│  db.py (dynamic Clay-style tables) · db-writer (single door)   │
+│  db.py (dynamic Clay-style tables · single door, called direct) │
 │  hooks (session banner, send-guard) · front (web UI)           │
 ├─ WORKSPACES (physical context isolation) ──────────────────────┤
 │  1 workspace = 1 client = 1 sealed world under bricks/         │
@@ -49,8 +49,8 @@ star: **bricks never call each other — the workspace database is the bus.**
 - A brick's IN and OUT are columns + statuses. Brick-to-brick handoff is a
   WHERE clause (`enrich` picks up what `find` wrote via
   `X_status='pending'`), never a call.
-- All database access goes through the `db-writer` agent (Rule 2 in
-  CLAUDE.md), always with the absolute `bricks.db` path.
+- All database access goes directly through `db.py` (Rule 2 in
+  CLAUDE.md), always with the absolute `bricks.db` path (`--db`).
 - Statuses make everything idempotent and resumable: `pending → running →
   done | not_found | failed`; row-level `new | disqualified`; messages
   `draft → approved → sent`.
@@ -67,11 +67,12 @@ next week automatically joins existing motions.
 
 | Block | Owner | State |
 |---|---|---|
-| Plumbing: workspace.py, db.py (dynamic), db-writer, session hook, front | Rémi | ✅ shipped, smoke-tested |
+| Plumbing: workspace.py, db.py (dynamic, called direct), session hook, front | Rémi | ✅ shipped, smoke-tested |
 | CONVENTIONS §1-7 (workspace, drift, gates, statuses, staging, memory) | Rémi | ✅ shipped |
-| CONVENTIONS §8 money gate + §9 BRICK contracts | Robin | ✅ shipped |
+| CONVENTIONS §8 money gate + BRICK contracts | Robin | ✅ shipped (§8 v3 big-spend gate in 0.10.1 — Rémi ack pending) |
+| Perf overhaul: db.py called direct (agent layer removed) + `claim` atomic + CONVENTIONS §9 waves-not-rows + parallel engines | Robin | ✅ shipped 0.11.0→0.14.0 (engine outputs proven identical; claim concurrency-tested; field run pending) |
 | workspace / interface / find / enrich / transform / scan-mentions | Rémi | ✅ shipped (find + enrich patched after test #1) |
-| find-directory-scrape / find-lookalike / write-sequence / playbook-lookalike | Robin | ✅ shipped |
+| find-directory-scrape / find-lookalike / write-outreach / playbook-lookalike | Robin | ✅ shipped |
 | enrich-firmographics (+ tools/firmo.py, official gov API) | Robin | ✅ shipped, field-tested ×2 |
 | enrich-buying-committee (targeting plan + waterfall) | Robin | ✅ shipped, field-tested |
 | enrich-person-profile (identity waterfall, FullEnrich-search first) | Robin | ✅ shipped, field-tested ×1 (0.4.1 patches) |
@@ -79,12 +80,15 @@ next week automatically joins existing motions.
 | find-hiring-signal (pain-matrix job-post sourcing) | Robin | ✅ shipped, field-tested ×1 (0.5.1 patches; survived a full Bright Data outage at 0 credits) |
 | tools/jobs.py (deterministic hunt engine: France Travail + HelloWork + career pages) | Robin | ✅ shipped, live-validated (reproduced both Gironde field runs, 0 credits, seconds) |
 | tools/news.py (company-news engine: Google News RSS + warning flag) | Robin | ✅ shipped, live-validated (SOPREMA/Predictice/MORICEAU spread) |
+| find-company-people (roster expansion, multi-threading) | Robin (spec Rémi) | ✅ shipped, field-tested ×1 (0.8.1 patches; 19 contacts / 0 credits) |
+| plan-outreach (evidence-based strategy: motion / channels / cadence / tiers) | Robin | ✅ shipped, field-tested ×1 (0.9.1 patches; picked email-first on evidence) |
+| playbook-outbound (deterministic full-motion dispatch, one chain GO) | Robin | ✅ shipped, field-tested ×1 (ran the milestone-3 pipeline end to end) |
 | Bright Data + FullEnrich MCP wiring | Robin | ✅ shipped, both Connected |
 
 ### Field-test log — the loop that improves the product
 
 Every fix below came from a real desktop test session. Plugin version at
-head: **0.7.2**.
+head: **0.14.0**.
 
 | Version | Trigger | What changed |
 |---|---|---|
@@ -95,7 +99,7 @@ head: **0.7.2**.
 | 0.3.1 | relance-devis-habitat run (couvreurs) | `company_name` on contacts (readable table), kill-rule scope pattern (no invented statuses), postal-code API filter (resolved 4 trade-name artisans; the historic "Merci" ambiguity now high-confidence) |
 | 0.4.0 | person-profile strategy review — live test proved FullEnrich *searches* are FREE and return full profiles (title, seniority, linkedin_url, dated job history); Proxycurl shut down July 4 (LinkedIn lawsuit), SERP demoted to fallback | enrich-person-profile shipped (FullEnrich-search-first waterfall) + NEW brick signal-person (job change free / LinkedIn posts / company news) + Bright Data pro mode (`&pro=1` → `web_data_linkedin_*` tools) |
 | 0.4.1 | relance-devis-habitat person-profile run #1 — 7 free profiles via FullEnrich search; 6 SERP credits → 0 hits on domain-less artisans; "Gérant" labeled Manager by the provider; kill-flagged SOPREMA claimed-then-reverted; a contact row added mid-run | rung B opt-in on low-presence segments (no domain + tiny/artisan) · French legal titles → C-Level over provider labels · kill flags in memory/ exclude from scope pre-score · enrich bricks never create rows (receipt suggestions only) · one upfront paid-budget confirmation per run |
-| 0.4.2 | signal-person fixture run (Julia Levy, tech-startups) — the move relay made person-profile write her Doctrine title onto her Predictice-anchored row; the planted signal (9 months old) was presented like fresh news; paid passes thin on a quiet profile | move ≠ promotion: a company change sets `left_company=1` (row frozen, excluded from person-profile AND write-sequence scopes), only promotions relay `profile_status` · `freshness` on every signal (≤60 days = fresh/icebreaker, older = context; write-sequence enforces it) · NEW hiring pass via `web_data_linkedin_job_listings` — often the strongest intent signal |
+| 0.4.2 | signal-person fixture run (Julia Levy, tech-startups) — the move relay made person-profile write her Doctrine title onto her Predictice-anchored row; the planted signal (9 months old) was presented like fresh news; paid passes thin on a quiet profile | move ≠ promotion: a company change sets `left_company=1` (row frozen, excluded from person-profile AND write-outreach scopes), only promotions relay `profile_status` · `freshness` on every signal (≤60 days = fresh/icebreaker, older = context; write-outreach enforces it) · NEW hiring pass via `web_data_linkedin_job_listings` — often the strongest intent signal |
 | 0.5.0 | hiring rework (GTM playbook review) — SERP-guessing "does X hire?" was the wrong altitude, and hiring is TWO motions, not one: checking tracked companies vs sourcing new ones | signal-person pass 3 v2: segment-aware multi-source sweep (France Travail/Indeed/HelloWork SERP for artisans-SMB, ATS-direct + LinkedIn Jobs for tech; no date operators; agencies/stage excluded; CNIL company-level rule) + NEW brick find-hiring-signal (pain-matrix sourcing: one GTM hypothesis per query, offer extraction to staging, /100 signal score, commit ≥70 with a ready outreach angle) |
 | 0.5.1 | first hiring field runs (Gironde) — Bright Data FULL outage (29/29 empty) absorbed by an improvised free-channel fallback at equal quality; 5-6 serial human gates per run made it painfully slow; ~135 interim offers filtered post-hoc; the morning's 8 signals rows missed `sig_key` | free-channel fallback + 1-credit health control promoted to doctrine (the doctrine is the engine, not the vendor) · ONE GO per run (matrix+budget+cut in a single confirmation; free passes never re-ask) · negative keywords in queries (interim brands) · `sig_key` added to find-hiring-signal's commit list (bug) + backfill · per-pass freshness (one pass's stamp never blocks another) · batched db-writer dispatches (per phase/batch, never per row) · source notes (France Travail keyword pages, LinkedIn post-ID dates) |
 | 0.5.2 | backfill receipt — the two hiring writers keyed `sig_key` with different URL conventions (normalized vs raw), a silent future-duplicate trap | canonical `sig_key` normalization written into BOTH skills (scheme/`www.` stripped, no trailing slash); the 8 backfilled keys re-normalized in base |
@@ -103,6 +107,18 @@ head: **0.7.2**.
 | 0.7.0 | script-the-plumbing continues | `tools/news.py` shipped (Google News RSS: free, no key, dated+sourced items, offer-term hits, distress `warning` flag for the kill gate; live-validated — SOPREMA 5 articles/45 j dont "CA record", 123 vieux articles filtrés, artisans QUIET honnêtes); signal-person pass 4 now script-first, SERP demoted to tier-A escalation; implementation note added to the score block: ship it as `tools/score.py` (the pattern is proven ×3) |
 | 0.7.1 | free re-scan run #2 — the session still ran 0.6.0 (Rule 3 trap: opened pre-update; news.py untested); the re-scan downgraded 3 contacts carrying valid context signals; the AMB career-page signal duplicated (homepage vs deep page → two sig_keys) — both self-caught and hand-fixed by the run | career-page hiring signals key on the DOMAIN (one per company; board offers keep full URLs) · jobs.py career probe now prefers the deep page over the homepage · downgrade rule: `not_found` only when no valid signal rows exist, else re-scans close `done` |
 | 0.7.2 | merge with Rémi's main — both sides had shipped a different "0.6.0" (version collision on rebase) | post-merge bump to a version neither cache has ever seen (Rule 3: a stale "already at latest" would silently hide the merged half); Robin's 0.5.0→0.7.1 line and Rémi's work now live in the same tree |
+| 0.8.0 | find-company-people questioned, then green-lit — the value case is the single point of failure: dead threads (SERBER's Thouvenin, spotted by committee but contractually left at the receipt), `left_company` refills (Julia Levy), collective deals on mid-size | find-company-people shipped on Rémi's spec (roster waterfall WITHOUT stop-at-first-hit, cap 4/company, single GO) + masked-name rule (provider-masked last names never inserted) + thin-row relay to person-profile |
+| 0.8.1 | roster field run #1 — the brick worked (19 contacts / 17 companies / 0 credits, Thouvenin in, masked names resolved via registry on the re-run, kill gate live: 4 disqualified auto-excluded) BUT the session peppered the user with trailing "veux-tu enchaîner ?" questions, paused on a user-named absent company, and burned 19 calls into a documented-dead Bright Data channel | receipts end with STATEMENTS, never questions (all Robin's bricks) · chain GO: follow-on bricks named in the request are budgeted in the single plan, zero mid-chain confirmations · user-named absent company auto-added (`source='user'`, flagged) · NEW rung A-bis: registry executives via `tools/firmo.py` (full first names — resolves initial-only site mentions) · workspace outage notes gate paid rungs to the free channel |
+| 0.8.2 | chain-GO field run #1 — the design WORKED (1 plan / 4 budget lines / 1 GO / 0 questions / budgets reconciled honestly / receipt in statements) but the "GO sec" made write-outreach violate its own hard gate: 21 drafts with placeholders its contract forbids | precedence rule: a chain GO never overrides a downstream brick's HARD gate — satisfy it at plan time (fold the missing input into the single GO) or end the chain before that brick, stating what is missing. Candidate for CONVENTIONS with the whole anti-friction set (receipts-no-questions, chain GO) — shared surface, needs both approvals |
+| 0.9.0 | strategy-layer design (2026 GTM corpus review with Robin) — write-sequence only wrote 3 emails and NOBODY decided the channel; "who is the orchestrator?" answered: the session (auto-delegation) or a playbook (explicit dispatch), never a brick, and bricks never talk to each other — artifacts on the bus | NEW plan-outreach (evidence-based strategy → `context/strategy.md` + `contacts.channel_plan`) · write-sequence RENAMED **write-outreach** and extended multi-channel (email + linkedin-invite/dm, CPPC doctrine, `voice.md` sender voice, strategy.md hard gate) · NEW playbook-outbound (deterministic full-motion dispatch, one chain GO, resumable) · all cross-references renamed |
+| 0.9.1 | strategy-layer field run #1 = the milestone-3 pipeline ran end to end on relance-devis-habitat (21 companies → firmo → strategy on evidence [email-first for artisans, decided on 66,7 % LinkedIn / 0 % email coverage] → 104 drafts → 16 send-ready, ≈16 credits, budgets held) — three slips: a disqualified company's contact got a channel_plan (caught downstream), email drafts written before addresses existed (user-consented but contract said otherwise), the signature was INFERRED from the machine username | channel_plan exclusion moved to assignment time · email-drafts-before-address = explicit GO opt-in (default: wait) · signatures are never inferred — re-ask the single missing field |
+| 0.9.2 | Robin's doctrine call on the drafts | LinkedIn invitations carry NO note, ever (corpus rule: add without a message, the profile does the credibility work) — the `linkedin-invite` row becomes an action item, not copy; the 19 written invite notes cleaned in base |
+| 0.10.0 | validation-fatigue review (Robin): §8's "explicit confirmation, silence is not consent" made every small spend a question; safety requirement = autonomous spend must stay SMALL, never "des 100 et des 1000" | CONVENTIONS §8 v2 — the autonomy envelope: free/small runs (≤ `context/budget.md` per_run, default 15 credits) run announced-but-UNASKED; beyond → ONE grouped GO with fallbacks; HARD ceiling 50/run + 200/week that only a human hand-edit of budget.md can raise; business inputs asked once per workspace, persisted. All 7 Robin bricks re-pointed to §8 v2. **Rémi ack pending on the CONVENTIONS diff** (shared surface) |
+| 0.10.1 | Robin's correction on 0.10.0 — no per-run/per-week envelopes, no bookkeeping: full autonomy ALWAYS, one question ONLY when a lot of credits go out at once | §8 v3 "big-spend gate": single threshold (default 50 credits per batch/action, user-adjustable by saying it — `spend_threshold` in state.json), silent below with spend + session cumulative in receipts, ONE grouped batch GO above ("les ~100 prochains ≈ 100 crédits — GO ?"); budget.md, weekly ceilings and run-cap list removed; bricks re-pointed |
+| 0.11.0 | perf audit #1 (Robin: runs felt "ligne après ligne") — the biggest hidden cost was the db-writer SUBAGENT: a full cold model round-trip (~15-25 s) to run a <100 ms deterministic command, ×12-20 dispatches per enrichment run = minutes of pure JSON-shuttling; the anti-drift rationale (one file knows db.py's CLI) never required an agent, only a single reference | db-writer agent REMOVED — skills call `db.py` directly (Bash, same as workspace.py/firmo.py); CONVENTIONS §5 becomes THE single CLI contract (count/schema/drop-* folded in; `--db <absolute path>` mandatory); CLAUDE.md Rule 2 rewritten; subagents write staging only, the main thread commits |
+| 0.12.0 | perf audit #2 — per-row waterfalls serialized N × network latency (row 1 rungs A→B→C, then row 2…), and volume mode spawned cold-start subagents from 10 rows | CONVENTIONS §9 "waves, not rows": one rung × whole batch fired IN PARALLEL in one message; batch tool variants preferred (`enrich_bulk`, `search_engine_batch`, `scrape_batch`); cost order preserved BETWEEN waves (§8 untouched); ONE db.py write per wave (iron rule 1 amended); subagent threshold ~10→~40; progress lives in statuses, the front reads live — 8 bricks re-pointed |
+| 0.13.0 | perf audit #3 — the deterministic engines were batch but fetched SERIALLY (0.16-0.8 s sleep between requests: pure I/O wait, CPU asleep) | firmo/jobs/news parallelized: ThreadPoolExecutor behind shared rate limiters (global for the gouv API — it counts req/s, not concurrency; PER-HOST for jobs politeness), all pacing centralized in fetch(), `--workers` flags (6/6/4), results assembled in input order — outputs proven byte-identical serial vs parallel on live runs (firmo 6 cos, news 4 cos, jobs 100 raw offers) |
+| 0.14.0 | the select-then-mark claim pattern was 2 round-trips AND a race window: two parallel runs could claim the same pending rows between the select and the mark | `db.py claim <table> <status_col>`: atomic select + mark-running in one BEGIN IMMEDIATE transaction (concurrency-tested — 4 parallel claimers, 20 rows, zero overlap); disqualified rows never claimed, `--retry-failed` for explicit retries; §5 iron rules 1-2 re-anchored on claim |
 
 Full pipeline validated in the field at **0 credits** end to end:
 sourcing (FullEnrich free preview) → firmographics (official API) →
@@ -160,13 +176,13 @@ issue per brick, assign = claim) · demo script.
   data (hard gate: never fabricate, never scrape around it); Bright Data
   `scrape_as_markdown` for web-content columns (WebFetch fallback for
   simple pages, auto-retry blocked rows through Bright Data once).
-  Batches of 5-8 rows, up to 10 subagents in parallel, each writing via
-  db-writer as results arrive.
+  Batches of 5-8 rows, up to 10 subagents in parallel, each appending
+  findings to staging as results arrive; the main thread commits via db.py.
 
 **transform** (Rémi ✅)
 - IN: an existing table + an instruction (dedupe, filter, derive, score…).
 - OUT: modified/derived rows or tables.
-- Strategy: express the transform as db-writer operations; deterministic
+- Strategy: express the transform as db.py operations; deterministic
   rules first (SQL-able), judgment only for ambiguous leftovers.
 
 **scan-mentions** (Rémi ✅)
@@ -189,7 +205,7 @@ issue per brick, assign = claim) · demo script.
 - Strategy: Bright Data `scrape_as_markdown` (JS + anti-bot delegated,
   hosted endpoint — no local install). Scout page 1 → announce plan
   (pages × ~1 credit, caps 10 pages/200 entries) → subagents scrape page
-  batches into staging JSONL → validate → db-writer commits. Optional
+  batches into staging JSONL → validate → db.py commits. Optional
   second pass for detail pages (`scrape_batch`).
 
 **find-lookalike** (Robin ✅)
@@ -205,16 +221,28 @@ issue per brick, assign = claim) · demo script.
   (search_engine or web search), subagents → staging → validated commit.
   Full motion (enrich-first) belongs to playbook-lookalike.
 
-**write-sequence** (Robin ✅)
-- IN: `contacts` with `email_status='done'` and pending sequence; parent
-  company pitch/language; `context/offer.md` (hard gate) + personas.
-- OUT: 3 `messages` rows per contact (step 1/2/3, send_day 0/3/7,
-  `status='draft'`, `msg_key` dedup) + `sequence_status='done'`.
-- Strategy: the strategy is IN the context — the skill applies personas and
-  proof points, never invents facts. Step 1 icebreaker anchored in enriched
-  data, step 2 proof point new angle, step 3 short breakup. ≤120/120/60
-  words, company's language, one example shown, drafts forever until a
-  human approves.
+**write-outreach** (Robin ✅ — renamed + extended from write-sequence, 0.9.0)
+- IN: `contacts` with `channel_plan` set (by plan-outreach) + pending
+  sequence + the lane prerequisite (email lane: `email_status='done'`;
+  linkedin lanes: `linkedin_url`); HARD gates `context/strategy.md` +
+  `offer.md`; soft gate `voice.md` (the SENDER's voice — tu/vous, ton,
+  interdits, signature; missing → defaults folded into the GO);
+  personas (the RECIPIENT's angle) + fresh signals / `hiring_angle`.
+- OUT: `messages` rows per step — `channel` = `email` |
+  `linkedin-invite` | `linkedin-dm`, `send_day` from the strategy's
+  template, `status='draft'` forever,
+  `msg_key='<contact_id>-<channel>-<step>'` — +
+  `sequence_status='done'`. Email drafts feed outreach-send later;
+  LinkedIn drafts are copy-paste material (automated LinkedIn sending
+  stays out by doctrine).
+- Strategy: EXECUTES strategy.md, never invents positioning. CPPC
+  (contexte → problème posé en sujet, jamais assené → UNE proposition
+  → UNE question), email < 100 mots, LinkedIn = a chat (invite ≤ 300
+  chars, DM 2-4 lines), plain subjects, personalization = one relevant
+  signal connected to the problem (fresh signals + hiring_angle
+  first), hot-manual tier = mini-audit opener, warm = feedback ask.
+  Forbidden: talking about yourself, selling in the message,
+  placeholders, invented facts.
 
 **playbook-lookalike** (Robin ✅)
 - IN: best customers from ANY source (CRM credential detected by shape,
@@ -282,10 +310,10 @@ VERIFIED hit).*
 Verification rule at every rung: name + role + company must cohere IN
 THE SOURCE ITSELF; ambiguity → next rung; nothing after D → fallback
 rule, else `not_found`. Never an invented or unverified person. Writes
-happen immediately per company via db-writer; dedup on
+happen immediately per company via db.py; dedup on
 (company_id + full_name). Volume mode (>10 companies): subagents run
 rungs B-D in parallel batches → staging JSONL → main thread verifies →
-db-writer commits; SERP credits announced first (§8).
+db.py commits; SERP credits announced first (§8).
 
 *Test protocol (validated fields on the tech-startups workspace):*
 0. `relance enrich-firmographics` first if the table predates the
@@ -344,7 +372,7 @@ receipts only in the conversation.
   PROMOTION resets the contact's `profile_status='pending'` (bus relay
   to enrich-person-profile); a company CHANGE sets `left_company=1`
   instead — row frozen, excluded from person-profile and
-  write-sequence scopes, following the person is the user's call
+  write-outreach scopes, following the person is the user's call
   (0.4.2, field-tested on the Julia Levy fixture).
 - Strategy: four announced passes, cheap first — job changes via FREE
   FullEnrich re-search (returned current employment vs stored columns;
@@ -367,7 +395,7 @@ receipts only in the conversation.
   derives from them) + Bright Data; confirmed `hiring_matrix`
   persisted in `memory/state.json`, reused silently.
 - OUT: `companies` rows (`source='hiring-signal'`, verified domain,
-  `hiring_score` 0-100, `hiring_angle` ready for write-sequence) + one
+  `hiring_score` 0-100, `hiring_angle` ready for write-outreach) + one
   `signals` row per company (`kind='hiring'`, freshness, evidence
   URL); raw offers + rejects in `staging/hiring-<date>/`.
 - Strategy: you are not searching job ads — you are searching
@@ -427,7 +455,7 @@ receipts only in the conversation.
   dropped, no-press artisans honestly QUIET. signal-person pass 4
   calls it first; SERP only for quiet tier-A accounts.
 
-**find-company-people** (user-requested as `find-people-company`)
+**find-company-people** ✅ (0.8.0 — spec by Rémi, user-requested; built by Robin)
 - IN: `companies` rows already in the DB (`domain` ideally),
   `people_status='pending'`, `status != 'disqualified'` + a role/title
   pattern (from the user or `context/icp.md` Buying roles / `personas/`).
@@ -447,9 +475,55 @@ receipts only in the conversation.
   Announce the volume (N companies × cap) under the money gate §8 before
   spending. Verify name + role + company cohere in the source; unverifiable
   → skip, never invent. Feeds enrich-person-profile (roster → per-person
-  enrichment) and write-sequence. Boundary is explicit so Claude never
+  enrichment) and write-outreach. Boundary is explicit so Claude never
   confuses the two: committee = pick THE contact; find-company-people =
-  list ALL matching contacts.
+  list ALL matching contacts. 0.8.0 implementation notes: ONE GO per
+  run (pattern + cap [default 4] + scope + worst-case budget in a
+  single confirmation); masked-name rule — FullEnrich-masked last
+  names ("Hakim A.") are never inserted, resolved via rungs B/C or
+  receipt-mentioned only; thin rows get `profile_status='pending'`
+  (bus relay to enrich-person-profile); the committee's `role_type`
+  is never touched; kill-flagged companies never claimed.
+
+**plan-outreach** ✅ (0.9.0 — the strategy brick)
+- IN: HARD gate `offer.md` + `icp.md` + `personas/`; EVIDENCE from the
+  base (firmo columns, `tier` distribution — absent → uniform-degraded
+  and stated, signal freshness, contact coverage: % linkedin_url,
+  % verified emails, seniority mix) + 3 facts folded into the single
+  GO (deal size, maturity pre-PMF/first-100/scaling, existing
+  audience).
+- OUT: `context/strategy.md` (motion, channel mix, cadence/volumes,
+  per-tier treatment A hot-manual / B standard / C light, sequence
+  templates per lane, the evidence behind each choice, date —
+  user-confirmed once, persisted, re-proposed only on material
+  change) + `contacts.channel_plan` = `email` | `linkedin` |
+  `linkedin+email` | `hot-manual`, per row, evidence-based.
+- Strategy: the team's 2026 GTM corpus distilled into a decision
+  doctrine (pre-PMF → LinkedIn validation · first-100 → founder
+  outbound, one channel deep · high-ticket → hot/ABM manual · high
+  LinkedIn coverage → authority + invite→email · education market →
+  content + warm email · existing audience → media system · PLG →
+  bottom-up · physical → omnichannel). LinkedIn+email is the B2B
+  default; email-only when the evidence says so (artisan ICPs). Runs
+  AFTER enrichment/score — evidence, never vibes. Never writes a
+  message: write-outreach executes, the orchestrator sequences.
+
+**playbook-outbound** ✅ (0.9.0 — the deterministic orchestrator of the motion)
+- IN: a workspace with context filled (TODO → dispatches gtm-onboard
+  first) + ONE chain GO (per-phase counts, worst-case budgets, the 3
+  strategy facts).
+- OUT: the pipeline's artifacts, each written by its own brick;
+  resumable phase log in `memory/state.json`.
+- Strategy: explicit dispatch, fixed order — evidence (firmo →
+  committee or roster → profiles) → score (kill gate + tiers;
+  degrades gracefully if absent) → free signal passes → plan-outreach
+  → write-outreach → human hand-over (approve email drafts,
+  copy-paste LinkedIn ones). Runtime discovery of installed bricks;
+  the only legitimate mid-chain stops are a strategy CONTRADICTION at
+  the plan phase or an unplanned cost. This answers "who is the
+  orchestrator?": the session auto-delegates for exploration; THIS
+  playbook is the trusted, rerunnable version (CLAUDE.md dispatch
+  doctrine).
 
 **signal-sillage**
 - IN: qualified accounts (tier A/B once scoring exists).
@@ -483,7 +557,7 @@ receipts only in the conversation.
   scoring re-runs free after every enrichment wave. Implementation
   note (0.7.0): ship the deterministic pass as `tools/score.py`
   reading `scoring.yaml` — the firmo/jobs/news pattern, proven ×3:
-  script applies the rules, LLM only explains edge cases, db-writer
+  script applies the rules, LLM only explains edge cases, db.py
   commits. The `signals` table (freshness, distress `warning`) is
   scoring input too.
 
@@ -533,6 +607,11 @@ receipts only in the conversation.
    interview.
 3. **Full pipeline demo** on a real ICP: find → enrich → kill/score →
    contacts → emails → sequences, the table telling the story live.
+   **First full run achieved 2026-07-06** (relance-devis-habitat:
+   21 companies → firmo → 30 contacts → signals → evidence-based
+   strategy → 104 drafts → 16 send-ready, ≈ 16 credits, one GO per
+   brick). Remaining for the demo proper: the formal score brick in
+   the loop + the live séance.
 4. **crm-import + playbook-lookalike** end-to-end (the differentiator vs
    Clay).
 5. V2: cockpit (tabs UI), outreach-send with approval queue, Sillage
