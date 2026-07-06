@@ -63,6 +63,43 @@ grouped GO for the whole batch, fallbacks included. The plan block:
   — field-tested: a "GO sec" produced 21 placeholder drafts a brick's
   contract forbids.
 
+## The engine lane — volume via the API (preferred when `FULLENRICH_API_KEY` is set)
+
+At volume this brick does not sweep in session — it compiles ONCE and
+dispatches the engine (CONVENTIONS §11), FullEnrich's HTTP API doing the
+per-company work deterministically:
+
+1. **Compile `prompts/people/params.json`** from the user's words +
+   `context/icp.md` Buying roles — the ONLY judgment of the run, and
+   where the intelligence lives:
+   - **`title_waves` = strict synonyms of the SAME activity**, tightest
+     first: `[["gtm growth engineer", "growth engineer"], ["head of
+     growth", "growth lead"], ["growth marketer"]]`. A wave renames the
+     person, it NEVER changes who is hunted — "GTM growth engineer" may
+     cascade to "growth marketer", never to "SDR" (different activity,
+     different pain). The cascade exists because real titles rarely
+     match the user's words; the boundary is the activity itself.
+   - Several roles named by the user ("des SDR ET des growth engineers
+     ET des CEO") = several GROUPS, each with its own waves, its own
+     seniority codes (`Owner`, `Founder`, `C-level`, `VP`, `Head`,
+     `Director`, `Manager`) and its own cap — never one mixed soup.
+   - Show the compiled params in 5-6 lines, confirm ONCE, persist —
+     re-runs reuse the file silently.
+2. **Run** — preview first, then the mass:
+   `runner.py run --action fetch --fetcher fullenrich_people --params …
+   --out-table contacts --run-id people-<date> --preview 10` → the user
+   checks the interface → ONE GO → `--commit`. Per company the fetcher
+   stops at the FIRST wave with verified hits (precision: waves are
+   fallback vocabulary, not net-widening); verified unmasked contacts
+   are inserted deduped on `person_key`, thin rows relayed to
+   enrich-person-profile (`profile_status='pending'`), everything
+   tagged `source_run` (rollback removes the inserted contacts too).
+   `metadata.credits` flows into the receipt — the preview shows the
+   REAL observed cost before the mass is authorized (§8 with facts).
+3. **No API key** (`FULLENRICH_API_KEY`, via `~/.bricks/env` or a shell
+   export — §11) → this lane is unavailable: say so once, point to
+   `~/.bricks/env`, and fall back to the session sweep below.
+
 ## The sweep — in waves (§9), cheap first, NO stop at first hit
 
 Run each rung as ONE wave across every company still under its cap —
@@ -132,9 +169,11 @@ bus relay, never a call. Then `companies.people_status='done'`. One
 
 ## Volume mode
 
-Up to ~40 companies, the main thread's parallel waves are the fast
-path — no subagents (§9.5). Beyond ~40: batches of 5-8 per subagent
-(up to 10 parallel), findings appended to
+The engine lane above IS the volume mode when the API key is present —
+tranches, parallel fetches, preview, rollback, all inherited from
+`runner.py`. Without the key: up to ~40 companies, the main thread's
+parallel waves are the fast path — no subagents (§9.5); beyond ~40,
+batches of 5-8 per subagent (up to 10 parallel), findings appended to
 `staging/people-<date>/candidates.jsonl`, main thread verifies,
 dedups and commits via `db.py`. The phase-0 budget covers the
 whole run.

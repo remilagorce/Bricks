@@ -18,6 +18,8 @@ Endpoints:
     GET  /api/table/<name>          {"headers": [...], "rows": [[...], ...]}
     POST /api/table/<name>/remove   {"ids": ["a1b2...", ...]} — delete rows by _id
     POST /api/workspace/switch      {"name": "<workspace>"} — switch current workspace
+    GET  /api/settings              engine keys status (~/.bricks/env) — values MASKED
+    POST /api/settings              {"key": "...", "value": "..."} — store one key
 
 Rows are addressed by the reserved `_id` column (INTEGER PRIMARY KEY),
 never by row number: ids do not shift when the table changes underneath the
@@ -43,6 +45,7 @@ sys.path.insert(0, os.path.join(PLUGIN_ROOT, "tools"))  # workspace + db modules
 
 import workspace as ws  # noqa: E402
 import db as dbtool     # noqa: E402
+import envfile          # noqa: E402
 
 PORT_SCAN_RANGE = 20
 
@@ -118,6 +121,15 @@ def _remove_rows(name: str, ids) -> dict:
     return {"ok": True, "table": name, "removed": result["removed"], "rows": result["rows"]}
 
 
+def _set_setting(payload: dict) -> dict:
+    """Store one engine key in ~/.bricks/env; the value is never echoed."""
+    try:
+        result = envfile.set_key(payload.get("key"), payload.get("value"))
+    except ValueError as exc:
+        raise ApiError(400, str(exc)) from None
+    return result
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = "BricksFront/0.1"
 
@@ -149,6 +161,8 @@ class Handler(BaseHTTPRequestHandler):
                 self._send_json(200, {"app": "bricks", "root": os.path.abspath(ROOT)})
             elif path == "/api/status":
                 self._send_json(200, ws.status(ROOT))
+            elif path == "/api/settings":
+                self._send_json(200, envfile.status())
             elif path.startswith("/api/table/"):
                 self._send_json(200, _read_table(path[len("/api/table/"):]))
             else:
@@ -167,6 +181,8 @@ class Handler(BaseHTTPRequestHandler):
                 raise ApiError(400, f"invalid JSON body: {exc}") from None
             if path == "/api/workspace/switch":
                 self._send_json(200, _switch_workspace(payload.get("name")))
+            elif path == "/api/settings":
+                self._send_json(200, _set_setting(payload))
             elif match:
                 self._send_json(200, _remove_rows(match.group(1), payload.get("ids")))
             else:

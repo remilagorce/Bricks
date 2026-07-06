@@ -1,0 +1,15 @@
+{
+  "runId": "s2",
+  "db": "/private/tmp/claude-501/-Volumes-Extreme-SSD-PROJET-DEV-Bricks/77c24128-f5d7-4fe8-aedf-bd6f18bd051a/scratchpad/engine/regr2.db",
+  "table": "companies",
+  "statusCol": "seg2_status",
+  "runCol": "seg2_run",
+  "fields": [
+    "tier"
+  ],
+  "evidenceCol": null,
+  "errorCol": "seg2_error",
+  "outTable": null,
+  "outRunCol": null,
+  "createdAt": "2026-07-06T20:02:56"
+}

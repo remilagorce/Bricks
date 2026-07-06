@@ -46,7 +46,10 @@ Follow the mandatory procedure in `${CLAUDE_PLUGIN_ROOT}/CONVENTIONS.md`:
    > Your table is live — click here: **http://127.0.0.1:4321**
 
    Mention that rows can be selected with the checkboxes and deleted from
-   the UI, and that the page auto-refreshes as skills write new data.
+   the UI, that the page auto-refreshes as skills write new data, and
+   that the ⚙ button (topbar) manages the engine's API keys — stored in
+   `~/.bricks/env`, values always masked (§11). When a run fails on a
+   missing key, pointing the user to that panel is the friendly fix.
 
 ## Rules
 

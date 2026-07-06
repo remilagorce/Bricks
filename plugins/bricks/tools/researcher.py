@@ -49,6 +49,11 @@ import subprocess
 import sys
 import tempfile
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import envfile  # noqa: E402
+
+envfile.load()  # ~/.bricks/env → workers inherit the headless token & co
+
 DEFAULT_WORKER_CMD = "claude -p --output-format json"
 DEFAULT_TIMEOUT = 120
 DEFAULT_MAX_PAGES = 5

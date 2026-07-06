@@ -17,9 +17,11 @@ this brick is for everything they don't.
 Follow `${CLAUDE_PLUGIN_ROOT}/CONVENTIONS.md` §2 (workspace) and §3
 (context gate — the question usually stands alone, but a kill rule that
 maps to the asked column is worth flagging). FullEnrich is not needed.
-`--tools web` needs the Bright Data token in the environment
-(`BRIGHTDATA_API_TOKEN` — the same one the session's MCP uses); absent →
-run `--tools none` lanes only and say so.
+`--tools web` needs the Bright Data token (`BRIGHTDATA_API_TOKEN` — the
+same one the session's MCP uses; the engine self-loads it from
+`~/.bricks/env`, §11); absent → run `--tools none` lanes only and say
+so. Workers need `CLAUDE_CODE_OAUTH_TOKEN` in the same file (desktop
+sandboxes cannot read the Keychain login).
 
 **Scale rule (§10)**: ≲5 rows, or a one-off question dictated in the
 conversation → handle it IN-SESSION (the session has the MCP at hand),

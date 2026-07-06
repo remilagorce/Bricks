@@ -393,7 +393,25 @@ python3 "${CLAUDE_PLUGIN_ROOT}/tools/runner.py" run \
 ... --action set --set segment=artisan --run-id seg-1 --commit
 python3 "${CLAUDE_PLUGIN_ROOT}/tools/runner.py" rollback --manifest <run>.manifest.json
 python3 "${CLAUDE_PLUGIN_ROOT}/tools/runner.py" release --db <db> --table companies --status-col cap_status
+
+# Provider fetch at volume (deterministic HTTP adapter, zero model):
+... --action fetch --fetcher fullenrich_people \
+    --params <ws>/prompts/people/params.json --out-table contacts \
+    --run-id people-<date> --preview 10   # then --commit
 ```
+
+`--action fetch` runs a deterministic adapter from `tools/fetchers/`
+(`fetch(row, params) → {status, rows, evidence, credits}`) per row — a
+provider's HTTP API called in pure Python (own key in env, shared rate
+limiter), never through the session. Found rows are INSERTED into
+`--out-table` (deduped on `--out-key`, default `person_key`), tagged
+`source_run` so `rollback` removes them with the run; the parent row
+carries status + evidence + run tag as usual. `params.json` is compiled
+ONCE by the skill (the pattern for people search: `groups` of
+`title_waves` — strict synonyms of the SAME activity, tightest first,
+stop at the first wave with verified hits; several explicit roles =
+several groups). Provider credits come back per call in the receipt —
+the preview shows the REAL cost before the mass is authorized (§8).
 
 Iron facts, enforced by the engine itself:
 
@@ -412,5 +430,22 @@ Iron facts, enforced by the engine itself:
 - **`--tools none` is the same engine without web** — judgment on
   existing columns; `claude -p` on the subscription by default,
   `BRICKS_WORKER_CMD` overrides (Agent SDK, mocks).
+- **Secrets self-load from `~/.bricks/env`** (KEY=value lines, chmod
+  600, outside every repo): worker auth is EITHER
+  `CLAUDE_CODE_OAUTH_TOKEN` (subscription — generated ONCE with `claude
+  setup-token`; the desktop sandbox cannot read the macOS Keychain, so
+  the interactive login never reaches subprocesses) OR
+  `ANTHROPIC_API_KEY` (API billing, created in the browser on
+  console.anthropic.com — `claude -p` honors it natively, zero login);
+  plus `FULLENRICH_API_KEY` and `BRIGHTDATA_API_TOKEN`. Shell exports
+  always take precedence; the engine never needs the user's shell
+  profile. **Missing key at run time** → ask the user to paste it in
+  the chat (provider keys only — NEVER ask for the OAuth token in
+  chat, it is full-account access; point to the terminal or the
+  front), then store it with
+  `python3 "${CLAUDE_PLUGIN_ROOT}/tools/envfile.py" set KEY VALUE`
+  and re-run. The front's ⚙ settings panel reads/writes the same file
+  (`/api/settings`, values always masked to their last 4 chars —
+  `envfile.py status` shows the same).
 - researcher.py has ONE caller: runner.py. A skill never spawns workers
   itself; a handful of rows (≲5) is handled in-session instead (§10).

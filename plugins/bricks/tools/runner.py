@@ -39,6 +39,11 @@ CLI (JSON receipt on stdout; errors as JSON on stderr + exit 1):
         --claim segment_status --action set --set segment=artisan \
         --run-id seg-1 --commit
 
+    python3 runner.py run --db DB --table companies \
+        --claim people_status --action fetch --fetcher fullenrich_people \
+        --params prompts/people/params.json --out-table contacts \
+        --run-id people-2026-07-06 (--preview 10 | --commit)
+
     python3 runner.py rollback --manifest <run>.manifest.json
     python3 runner.py release  --db DB --table companies --status-col cap_status
 """
@@ -48,10 +53,12 @@ from __future__ import annotations
 import argparse
 import concurrent.futures
 import datetime
+import importlib.util
 import json
 import os
 import re
 import sys
+import unicodedata
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import db  # noqa: E402
@@ -106,6 +113,28 @@ def data_payload(row: dict, input_cols: str) -> dict:
     return {k: row.get(k) for k in wanted}
 
 
+def norm_name(text: str) -> str:
+    text = unicodedata.normalize("NFKD", text or "")
+    text = "".join(c for c in text if not unicodedata.combining(c))
+    return re.sub(r"[^a-z0-9]+", " ", text.lower()).strip()
+
+
+def load_fetcher(name: str):
+    """Load tools/fetchers/<name>.py — the deterministic per-row adapters."""
+    if not re.fullmatch(r"[A-Za-z0-9_]+", name or ""):
+        raise RunnerError(f"invalid fetcher name {name!r}")
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                        "fetchers", f"{name}.py")
+    if not os.path.isfile(path):
+        raise RunnerError(f"fetcher not found: {path}")
+    spec = importlib.util.spec_from_file_location(f"fetchers_{name}", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    if not hasattr(module, "fetch"):
+        raise RunnerError(f"fetcher {name} has no fetch(row, params) function")
+    return module
+
+
 # --------------------------------------------------------------------------
 # Bookkeeping columns
 # --------------------------------------------------------------------------
@@ -136,14 +165,36 @@ def result_update(row_id: int, outcome: dict, status_col: str, book: dict,
 # Run
 # --------------------------------------------------------------------------
 
+def child_rows_of(args, row: dict, outcome: dict) -> list[dict]:
+    """Shape a fetch outcome's people into out-table rows (contacts)."""
+    children = []
+    for person in outcome.get("rows", []):
+        child = dict(person)
+        child["company_id"] = row["_id"]
+        child["company_name"] = row.get("name")
+        child["source"] = args.fetcher
+        child["status"] = "new"
+        child["source_run"] = args.run_id
+        child[args.out_key] = f"{row['_id']}:{norm_name(person.get('full_name'))}"
+        if not person.get("linkedin_url") or not person.get("seniority"):
+            child["profile_status"] = "pending"  # thin row → person-profile relay
+        children.append(child)
+    return children
+
+
 def process_tranche(args, rows: list[dict], schema: dict | None,
                     template: str | None, book: dict, counts: dict,
                     samples: list) -> None:
     """Work one claimed tranche; write results in waves via db.py."""
-    buffer = []
+    buffer, children = [], []
     flush_at = max(8, args.workers)
 
     def flush() -> None:
+        if children:
+            # children BEFORE parents: a crash between the two leaves the
+            # parent 'running' → release → re-run → dedup on out_key skips
+            db.add(args.db, args.out_table, list(children), key=args.out_key)
+            del children[:]
         if buffer:
             db.modify(args.db, args.table, updates=list(buffer))
             del buffer[:]
@@ -159,6 +210,12 @@ def process_tranche(args, rows: list[dict], schema: dict | None,
         except researcher.ResearchError as exc:
             return {"status": "failed", "fields": {}, "error": str(exc)}
 
+    def work_fetch(row: dict) -> dict:
+        try:
+            return args.fetcher_mod.fetch(row, args.params_obj)
+        except Exception as exc:  # a fetcher must never kill the run
+            return {"status": "failed", "rows": [], "error": str(exc)}
+
     if args.action == "set":
         updates = []
         for row in rows:
@@ -171,22 +228,36 @@ def process_tranche(args, rows: list[dict], schema: dict | None,
         samples.extend(updates[: max(0, 10 - len(samples))])
         return
 
+    work = work_fetch if args.action == "fetch" else work_agent
     with concurrent.futures.ThreadPoolExecutor(max_workers=args.workers) as pool:
-        futures = {pool.submit(work_agent, row): row for row in rows}
+        futures = {pool.submit(work, row): row for row in rows}
         for future in concurrent.futures.as_completed(futures):
             row = futures[future]
             outcome = future.result()
             counts[outcome["status"]] = counts.get(outcome["status"], 0) + 1
-            buffer.append(result_update(row["_id"], outcome,
-                                        status_col_of(args), book, args.run_id))
-            if len(samples) < 10:
+            counts["credits"] += int(outcome.get("credits") or 0)
+            if args.action == "fetch":
+                new_children = child_rows_of(args, row, outcome)
+                children.extend(new_children)
+                counts["inserted"] += len(new_children)
+                outcome = dict(outcome)
+                outcome["fields"] = {}
+                if len(samples) < 10:
+                    samples.append({"_id": row["_id"],
+                                    "status": outcome["status"],
+                                    "people": [c["full_name"] for c in new_children],
+                                    "evidence": outcome.get("evidence", ""),
+                                    "error": outcome.get("error", "")})
+            elif len(samples) < 10:
                 samples.append({"_id": row["_id"], "status": outcome["status"],
                                 **outcome.get("fields", {}),
                                 "evidence": outcome.get("evidence", ""),
                                 "error": outcome.get("error", "")})
+            buffer.append(result_update(row["_id"], outcome,
+                                        status_col_of(args), book, args.run_id))
             if len(buffer) >= flush_at:
                 flush()
-            log(f"[runner] {sum(v for k, v in counts.items() if k != 'claimed')}"
+            log(f"[runner] {sum(counts.get(k, 0) for k in ('done', 'not_found', 'failed'))}"
                 f"/{counts['claimed']} rows settled")
     flush()
 
@@ -217,13 +288,22 @@ def run(args) -> dict:
         if collisions:
             raise RunnerError(f"schema field(s) collide with bookkeeping "
                               f"columns: {collisions}")
+    elif args.action == "fetch":
+        if not args.fetcher or not args.params or not args.out_table:
+            raise RunnerError("--action fetch needs --fetcher, --params "
+                              "and --out-table")
+        args.fetcher_mod = load_fetcher(args.fetcher)
+        with open(args.params, encoding="utf-8") as f:
+            args.params_obj = json.load(f)
     else:
         if not args.set_pairs:
             raise RunnerError("--action set needs at least one --set col=value")
 
     book = bookkeeping(status_col_of(args),
-                       bool(schema and schema.get("evidence")))
-    counts = {"claimed": 0, "done": 0, "not_found": 0, "failed": 0}
+                       bool(schema and schema.get("evidence"))
+                       or args.action == "fetch")
+    counts = {"claimed": 0, "done": 0, "not_found": 0, "failed": 0,
+              "inserted": 0, "credits": 0}
     samples: list = []
     tranche = args.preview if args.preview else min(args.limit, DEFAULT_TRANCHE)
 
@@ -249,17 +329,24 @@ def run(args) -> dict:
         if args.preview:
             break
 
+    if args.action == "agent":
+        fields = list(schema["fields"])
+    elif args.action == "fetch":
+        fields = []
+    else:
+        fields = list(args.set_pairs.keys())
     manifest = {
         "runId": args.run_id, "db": os.path.abspath(args.db),
         "table": args.table, "statusCol": status_col_of(args),
-        "runCol": book["run"],
-        "fields": (list(schema["fields"]) if schema
-                   else list(args.set_pairs.keys())),
+        "runCol": book["run"], "fields": fields,
         "evidenceCol": book.get("evidence"), "errorCol": book["error"],
+        "outTable": args.out_table if args.action == "fetch" else None,
+        "outRunCol": "source_run" if args.action == "fetch" else None,
         "createdAt": datetime.datetime.now().isoformat(timespec="seconds"),
     }
+    source = args.prompt or args.params
     manifest_path = args.manifest or os.path.join(
-        os.path.dirname(os.path.abspath(args.prompt)) if args.prompt else ".",
+        os.path.dirname(os.path.abspath(source)) if source else ".",
         f"{args.run_id}.manifest.json")
     with open(manifest_path, "w", encoding="utf-8") as f:
         json.dump(manifest, f, ensure_ascii=False, indent=2)
@@ -280,6 +367,14 @@ def run(args) -> dict:
 def rollback(manifest_path: str) -> dict:
     with open(manifest_path, encoding="utf-8") as f:
         m = json.load(f)
+    removed = 0
+    if m.get("outTable"):
+        try:
+            gone = db.remove(m["db"], m["outTable"],
+                             where=f"{m['outRunCol']}='{m['runId']}'")
+            removed = gone["removed"]
+        except db.DbError:
+            removed = 0  # nothing was ever inserted (table absent)
     sets = {field: None for field in m["fields"]}
     sets[m["statusCol"]] = "pending"
     sets[m["runCol"]] = None
@@ -289,7 +384,8 @@ def rollback(manifest_path: str) -> dict:
     result = db.modify(m["db"], m["table"], sets=sets,
                        where=f"{m['runCol']}='{m['runId']}'")
     return {"ok": True, "action": "rollback", "runId": m["runId"],
-            "table": m["table"], "rowsReset": result["updatedRows"]}
+            "table": m["table"], "rowsReset": result["updatedRows"],
+            "childRowsRemoved": removed}
 
 
 def release(db_path: str, table: str, status_col: str) -> dict:
@@ -321,10 +417,19 @@ def main(argv=None) -> int:
     p.add_argument("--retry-failed", action="store_true")
     p.add_argument("--limit", type=int, default=DEFAULT_TRANCHE,
                    help=f"tranche size (default {DEFAULT_TRANCHE})")
-    p.add_argument("--action", required=True, choices=["agent", "set"])
+    p.add_argument("--action", required=True, choices=["agent", "set", "fetch"])
     p.add_argument("--prompt", default=None,
                    help="instructions.md with {{column}} variables")
     p.add_argument("--schema", default=None, help="schema.json (output fields)")
+    p.add_argument("--fetcher", default=None,
+                   help="action fetch: adapter name under tools/fetchers/")
+    p.add_argument("--params", default=None,
+                   help="action fetch: params.json compiled by the skill")
+    p.add_argument("--out-table", default=None,
+                   help="action fetch: table receiving the found rows "
+                        "(e.g. contacts)")
+    p.add_argument("--out-key", default="person_key",
+                   help="dedup key column on the out table (default person_key)")
     p.add_argument("--tools", default="none", choices=["none", "web"])
     p.add_argument("--model", default=None, help="worker model (e.g. haiku)")
     p.add_argument("--max-pages", type=int, default=researcher.DEFAULT_MAX_PAGES)

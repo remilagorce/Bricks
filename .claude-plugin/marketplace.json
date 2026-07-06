@@ -1,19 +1,19 @@
 {
   "name": "bricks",
   "owner": {
-    "name": "Rémi Lagorce",
+    "name": "Rémi Lagorce & Robin Jehanno",
     "url": "https://github.com/remilagorce"
   },
   "metadata": {
     "description": "Bricks — the open-source GTM engine. Replace Clay with open source and native integrations.",
-    "version": "0.15.0"
+    "version": "0.17.1"
   },
   "plugins": [
     {
       "name": "bricks",
       "source": "./plugins/bricks",
       "description": "Core GTM skills — workspace management, find, enrich and transform over a per-workspace SQLite database.",
-      "version": "0.15.0"
+      "version": "0.17.1"
     }
   ]
 }

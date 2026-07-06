@@ -301,6 +301,33 @@
   .export-opt .fmt { font-size: 15px; font-weight: 600; color: var(--text); }
   .export-opt .fmt-desc { font-size: 11.5px; color: var(--text-dim); }
 
+  /* ---- settings (engine API keys) ---- */
+  .modal-settings { width: 520px; }
+  .key-row {
+    display: flex; flex-direction: column; gap: 8px;
+    padding: 12px 0; border-top: 1px solid var(--border-soft);
+  }
+  .key-info { display: flex; align-items: flex-start; gap: 10px; }
+  .key-dot { width: 8px; height: 8px; border-radius: 50%; margin-top: 5px; flex: none; }
+  .key-dot.ok { background: #3fb950; }
+  .key-dot.missing { background: var(--text-faint); }
+  .key-text { min-width: 0; }
+  .key-label { font-size: 13px; font-weight: 600; color: var(--text); }
+  .key-hint { font-size: 11.5px; color: var(--text-dim); margin-top: 2px; }
+  .key-hint code { font-size: 11px; }
+  .key-edit { display: flex; gap: 8px; }
+  .key-edit input {
+    flex: 1; height: 30px; font-size: 12px; padding: 0 10px;
+    border: 1px solid var(--border); border-radius: 7px;
+    background: var(--hover); color: var(--text); font-family: inherit;
+  }
+  .key-edit input:focus { outline: none; border-color: var(--accent); }
+  .settings-error {
+    margin: 0 0 12px; padding: 8px 10px; border-radius: 7px; font-size: 12px;
+    background: rgba(248, 81, 73, .12); color: #f85149;
+    border: 1px solid rgba(248, 81, 73, .35);
+  }
+
   /* ---- layout: sidebar + main ---- */
   .main { flex: 1; min-height: 0; display: flex; }
   .content { flex: 1; min-width: 0; display: flex; flex-direction: column; }
@@ -988,6 +1015,37 @@ function App() {
   const [selected, setSelected] = useState(new Set()); // 1-based row numbers
   const [confirming, setConfirming] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settings, setSettings] = useState(null);       // {path, keys:[...]}
+  const [keyInputs, setKeyInputs] = useState({});        // key -> pasted value
+  const [savingKey, setSavingKey] = useState(null);
+  const [settingsError, setSettingsError] = useState(null);
+
+  const openSettings = async () => {
+    setSettingsOpen(true);
+    setSettingsError(null);
+    try { setSettings(await api("/api/settings")); }
+    catch (e) { setSettingsError(e.message); }
+  };
+  const saveKey = async (key) => {
+    const value = (keyInputs[key] || "").trim();
+    if (!value) return;
+    setSavingKey(key);
+    setSettingsError(null);
+    try {
+      await api("/api/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key, value }),
+      });
+      setKeyInputs(prev => ({ ...prev, [key]: "" }));
+      setSettings(await api("/api/settings"));
+    } catch (e) {
+      setSettingsError(e.message);
+    } finally {
+      setSavingKey(null);
+    }
+  };
   const [exporting, setExporting] = useState(null);    // "csv" | "xlsx" while running
   const [busy, setBusy] = useState(false);
   const [switching, setSwitching] = useState(null);   // workspace name being switched to
@@ -1385,6 +1443,7 @@ function App() {
           <button class="btn-export" title="Exporter la table" onClick=${() => setExportOpen(true)}>
             <span>⭳</span> Exporter
           </button>`}
+        <button class="icon-btn" title="Clés API du moteur" onClick=${openSettings}>⚙</button>
         <button class="icon-btn" title=${theme === "dark" ? "Passer en mode clair" : "Passer en mode sombre"} onClick=${() => setTheme(t => t === "dark" ? "light" : "dark")}>${theme === "dark" ? "☀" : "☾"}</button>
         <button class=${"icon-btn" + (loading ? " spinning" : "")} title="Refresh" onClick=${() => refresh()}>↻</button>
       </div>
@@ -1421,6 +1480,44 @@ function App() {
                 <span class="fmt-desc">Classeur Excel natif</span>
               </button>
             </div>
+          </div>
+        </div>`}
+      ${settingsOpen && html`
+        <div class="modal-overlay" onClick=${() => !savingKey && setSettingsOpen(false)}>
+          <div class="modal modal-settings" onClick=${e => e.stopPropagation()}>
+            <div class="modal-head">
+              <h3>⚙ Clés API du moteur</h3>
+              <button class="icon-btn" title="Fermer" disabled=${!!savingKey} onClick=${() => setSettingsOpen(false)}>✕</button>
+            </div>
+            <p class="modal-sub">
+              Stockées dans <code>${settings ? settings.path : "~/.bricks/env"}</code> (chmod 600, hors de tout repo).
+              Colle une clé puis Enregistrer — la valeur n'est jamais réaffichée, seulement ses 4 derniers caractères.
+            </p>
+            ${settingsError && html`<div class="settings-error">${settingsError}</div>`}
+            ${!settings && !settingsError && html`<div class="modal-sub">Chargement…</div>`}
+            ${settings && settings.keys.map(k => html`
+              <div class="key-row" key=${k.key}>
+                <div class="key-info">
+                  <span class=${"key-dot " + (k.set ? "ok" : "missing")}></span>
+                  <div class="key-text">
+                    <div class="key-label">${k.label}</div>
+                    <div class="key-hint">
+                      <code>${k.key}</code>
+                      ${k.set ? html` · configurée <code>${k.masked}</code>` : html` · manquante — ${k.hint}`}
+                    </div>
+                  </div>
+                </div>
+                <div class="key-edit">
+                  <input type="password" autocomplete="off" placeholder=${k.set ? "Remplacer…" : "Coller la clé…"}
+                    value=${keyInputs[k.key] || ""}
+                    onInput=${e => setKeyInputs(prev => ({ ...prev, [k.key]: e.target.value }))}
+                    onKeyDown=${e => { if (e.key === "Enter") saveKey(k.key); }} />
+                  <button class="btn-toolbar" disabled=${savingKey === k.key || !(keyInputs[k.key] || "").trim()}
+                    onClick=${() => saveKey(k.key)}>
+                    ${savingKey === k.key ? "…" : "Enregistrer"}
+                  </button>
+                </div>
+              </div>`)}
           </div>
         </div>`}
     </div>`;
