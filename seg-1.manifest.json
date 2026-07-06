@@ -1,0 +1,13 @@
+{
+  "runId": "seg-1",
+  "db": "/private/tmp/claude-501/-Volumes-Extreme-SSD-PROJET-DEV-Bricks/77c24128-f5d7-4fe8-aedf-bd6f18bd051a/scratchpad/engine/test.db",
+  "table": "companies",
+  "statusCol": "seg_status",
+  "runCol": "seg_run",
+  "fields": [
+    "segment"
+  ],
+  "evidenceCol": null,
+  "errorCol": "seg_error",
+  "createdAt": "2026-07-06T18:53:13"
+}

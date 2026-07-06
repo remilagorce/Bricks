@@ -63,8 +63,11 @@ rows in the receipt (do not disqualify silently — confirm with the user).
    - **Batch tools first**: N contacts to enrich → ONE FullEnrich
      `enrich_bulk` job (async — store the job id in `memory/state.json`
      so an interrupted run fetches results later instead of paying
-     twice, §8.5). N pages to read → ONE Bright Data `scrape_batch`
-     call, not N `scrape_as_markdown` calls.
+     twice, §8.5); fetch the results per §10 — beyond ~20 rows,
+     `export_enrichment_results` → CSV URL → `staging/` → `db.py
+     import-csv`, never `get_enrichment_results` pagination. N pages to
+     read → ONE Bright Data `scrape_batch` call, not N
+     `scrape_as_markdown` calls.
    - **No batch variant** → fire the whole wave's calls IN PARALLEL in
      one message (all the fetches, then all the fallbacks on misses).
    - As each wave completes, ONE `db.py modify --updates` writes its

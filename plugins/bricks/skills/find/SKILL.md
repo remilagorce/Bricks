@@ -33,7 +33,10 @@ Follow the mandatory procedure in `${CLAUDE_PLUGIN_ROOT}/CONVENTIONS.md`:
    1. **FullEnrich search** when `mcp__fullenrich__*` tools are present
       and the target is a firmographic segment (industry, size,
       geography, titles): free preview (10 results + total count), then
-      confirm the export volume per the money gate (§8). If FullEnrich is
+      confirm the export volume per the money gate (§8). Volume flows by
+      FILE, never through the conversation (§10): `export_companies` →
+      CSV URL → fetch into `staging/` → `db.py import-csv --key domain`.
+      Never page bulk results through MCP replies. If FullEnrich is
       NOT connected, say so once ("run `/mcp` → fullenrich to unlock the
       B2B database") and fall back — never silently skip it.
    2. **Bright Data** (`search_engine`, or the find-directory-scrape

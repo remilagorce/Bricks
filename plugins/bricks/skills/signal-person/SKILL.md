@@ -46,6 +46,9 @@ a signal already seen.
 Each pass runs as ONE wave over its whole scope (§9): passes 3-4 are
 already batched by their scripts; for passes 1-2, fire every contact's
 lookup IN PARALLEL in a single message — never one contact at a time.
+Pass 2's records are heavy: beyond a handful of contacts, route them
+through sponge subagents (§10) so the raw posts never touch the
+session's context.
 
 - **Pass 1 — job change (FullEnrich search, FREE — searches cost 0
   credits)**: look each contact up by `person_linkedin_urls` (fallback:

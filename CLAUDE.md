@@ -19,10 +19,13 @@ plugins/bricks/
     enrich/SKILL.md               #   fill columns on existing rows
     transform/SKILL.md            #   clean/dedupe/score/filter tables
     scan-mentions/SKILL.md        #   answer one question about a site
+    web-researcher/SKILL.md       #   any per-row question → columns, via the engine
     interface/SKILL.md            #   launch the local web UI
   tools/
     workspace.py                  # workspace lifecycle (bricks/config.json)
     db.py                         # the only door to bricks.db (called directly by skills)
+    runner.py                     # THE ENGINE's loop: claim → action per row → wave writes
+    researcher.py                 # THE ENGINE's unit: 1 disposable agent, 1 row, MCP optional
     session_start.py              # SessionStart hook: injects workspace banner
   front/                          # local web UI (server.py + index.html)
   templates/context/              # scaffolded into new workspaces (offer.md, icp.md, personas/)
@@ -108,3 +111,20 @@ and every session keeps running the stale cache — silently. Any change under
 `.claude-plugin/marketplace.json`, then `claude plugin update bricks@bricks`
 and a session restart. (This bug cost us two test sessions running a plugin
 from before the merge.)
+
+## Rule 4 — the mass never rides the context
+
+The conversation decides; files and the database carry (CONVENTIONS §10).
+Per-row AI work at volume runs through THE ENGINE (CONVENTIONS §11): the
+skill compiles the user's question into `prompts/<slug>/instructions.md`
+(`{{column}}` variables) + `schema.json` (fields → columns), then
+`tools/runner.py` loops — claim by tranches, one disposable
+`tools/researcher.py` agent per row (Bright Data MCP optional), validated
+structured answers, wave writes through `db.py`, reconciled receipt. The
+session model never iterates rows and never reads a scraped page at
+volume; bulk provider data moves by export CSV → `staging/` →
+`import-csv`, never through MCP replies. Preview of 10 rows in base +
+ONE GO before any mass write; `runner.py rollback` undoes a run;
+statuses are the checkpoint — there is no side ledger. A handful of rows
+(≲5) stays in-session; three files are the whole engine — do not add
+per-skill iterators.

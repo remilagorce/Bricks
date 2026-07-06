@@ -25,6 +25,7 @@ Claude subscription). Nobody resells credits or tokens.
 ├─ PLUMBING (the frozen contract) ───────────────────────────────┤
 │  workspace.py (multi-workspace lifecycle, staging, memory)     │
 │  db.py (dynamic Clay-style tables · single door, called direct) │
+│  THE ENGINE: runner.py (loop) · researcher.py (1 agent/row)     │
 │  hooks (session banner, send-guard) · front (web UI)           │
 ├─ WORKSPACES (physical context isolation) ──────────────────────┤
 │  1 workspace = 1 client = 1 sealed world under bricks/         │
@@ -71,6 +72,7 @@ next week automatically joins existing motions.
 | CONVENTIONS §1-7 (workspace, drift, gates, statuses, staging, memory) | Rémi | ✅ shipped |
 | CONVENTIONS §8 money gate + BRICK contracts | Robin | ✅ shipped (§8 v3 big-spend gate in 0.10.1 — Rémi ack pending) |
 | Perf overhaul: db.py called direct (agent layer removed) + `claim` atomic + CONVENTIONS §9 waves-not-rows + parallel engines | Robin | ✅ shipped 0.11.0→0.14.0 (engine outputs proven identical; claim concurrency-tested; field run pending) |
+| THE ENGINE: runner.py + researcher.py + web-researcher skill + CONVENTIONS §10-§11 (data plane, pilot wave) | Robin | ✅ shipped 0.15.0 (12-scenario mock bench green; real `claude -p` + Bright Data web lane: field run pending) |
 | workspace / interface / find / enrich / transform / scan-mentions | Rémi | ✅ shipped (find + enrich patched after test #1) |
 | find-directory-scrape / find-lookalike / write-outreach / playbook-lookalike | Robin | ✅ shipped |
 | enrich-firmographics (+ tools/firmo.py, official gov API) | Robin | ✅ shipped, field-tested ×2 |
@@ -88,7 +90,7 @@ next week automatically joins existing motions.
 ### Field-test log — the loop that improves the product
 
 Every fix below came from a real desktop test session. Plugin version at
-head: **0.14.0**.
+head: **0.15.0**.
 
 | Version | Trigger | What changed |
 |---|---|---|
@@ -119,6 +121,7 @@ head: **0.14.0**.
 | 0.12.0 | perf audit #2 — per-row waterfalls serialized N × network latency (row 1 rungs A→B→C, then row 2…), and volume mode spawned cold-start subagents from 10 rows | CONVENTIONS §9 "waves, not rows": one rung × whole batch fired IN PARALLEL in one message; batch tool variants preferred (`enrich_bulk`, `search_engine_batch`, `scrape_batch`); cost order preserved BETWEEN waves (§8 untouched); ONE db.py write per wave (iron rule 1 amended); subagent threshold ~10→~40; progress lives in statuses, the front reads live — 8 bricks re-pointed |
 | 0.13.0 | perf audit #3 — the deterministic engines were batch but fetched SERIALLY (0.16-0.8 s sleep between requests: pure I/O wait, CPU asleep) | firmo/jobs/news parallelized: ThreadPoolExecutor behind shared rate limiters (global for the gouv API — it counts req/s, not concurrency; PER-HOST for jobs politeness), all pacing centralized in fetch(), `--workers` flags (6/6/4), results assembled in input order — outputs proven byte-identical serial vs parallel on live runs (firmo 6 cos, news 4 cos, jobs 100 raw offers) |
 | 0.14.0 | the select-then-mark claim pattern was 2 round-trips AND a race window: two parallel runs could claim the same pending rows between the select and the mark | `db.py claim <table> <status_col>`: atomic select + mark-running in one BEGIN IMMEDIATE transaction (concurrency-tested — 4 parallel claimers, 20 rows, zero overlap); disqualified rows never claimed, `--retry-failed` for explicit retries; §5 iron rules 1-2 re-anchored on claim |
+| 0.15.0 | architecture review with Robin (Claygent model) — three fears named: 5 000 wrong rows discovered too late, MCP bulk data rotting the session context, per-skill iterators multiplying; plus the field truth that any per-row question should be enrichable without a specialized brick | THE ENGINE shipped: `tools/runner.py` (the only loop — claim by tranches with a per-run re-claim guard, `{{column}}` merge validated BEFORE spend, actions `agent`/`set`, wave writes, reconciled receipts, `--preview 10` in-base + rollback by run manifest + `release` for crashed rows, workers hard-capped ~10) + `tools/researcher.py` (ONE disposable agent per row, `claude -p` default / `BRICKS_WORKER_CMD` override, Bright Data MCP optional `--tools web` capped by `--max-pages`, structured multi-field answers validated, never invents) + NEW skill web-researcher (any question → columns; ≲5 rows stay in-session) + CONVENTIONS §10 control/data plane (the "does the model need to READ it?" test, FullEnrich CSV exports mandatory >~20 rows, sponge subagents, pilot wave) + §11 engine contract + CLAUDE.md Rule 4. 12-scenario mock bench green (template refusal pre-spend, preview/commit/idempotence, retry no-loop, rollback, release, set, error columns); real `claude -p` auth unavailable in the build sandbox — field run pending |
 
 Full pipeline validated in the field at **0 credits** end to end:
 sourcing (FullEnrich free preview) → firmographics (official API) →

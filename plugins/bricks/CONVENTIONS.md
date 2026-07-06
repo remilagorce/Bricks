@@ -318,9 +318,99 @@ rows the previous wave left unresolved. N sequential waterfalls become
    batches (5-8 rows each, up to 10 in parallel) that run the waves and
    append findings to `staging/` (§6); the main thread verifies and
    commits. Subagents never write the database and never spend beyond
-   the announced budget.
+   the announced budget. They are also CONTEXT SPONGES (§10): their
+   disposable context absorbs the raw pages the session must never see —
+   ≳10 pages to read means sponges even under the ~40-row threshold.
 6. **Progress lives in statuses, never in mid-run displays.** The front
    reads the database live — a column updates in the UI when its wave
    commits. Never pause a run to show intermediate tables in the chat,
    never wait for the user mid-wave: one announcement at start, receipts
    at the end (§8).
+
+## 10. Control plane / data plane — the mass never rides the context
+
+The conversation DECIDES; files and the database CARRY. Before any data
+enters the conversation, apply one test: **does the model need to READ
+this to decide something?**
+
+- **No** → it never enters the context. Move it by file: FullEnrich's
+  export tools (`export_companies`, `export_contacts`,
+  `export_enrichment_results`) return a CSV URL — download it with a
+  plain fetch into `staging/`, then `db.py import-csv`. MANDATORY beyond
+  ~20 rows; `get_enrichment_results` and search pagination are for small
+  jobs only. Never paste a bulk MCP result into the conversation.
+- **Yes, small volume** → it enters, capped: previews of 10, `select
+  --limit`, receipts with ≤3 sample rows (§5).
+- **Yes, at volume** → it enters a DISPOSABLE context, never the
+  session's: subagent sponges (§9.5) for session work, engine workers
+  (§11) for industrial runs. Bright Data has no file mode — its pages
+  always land in a throwaway context, never in the session.
+
+**The pilot wave.** Any run about to write ≳100 rows of GENERATED
+content (agent answers, judged values, drafts) starts with a preview:
+the engine's `--preview 10` writes the first 10 rows to the database,
+tagged with the run id — the user checks them (in the interface, which
+reads live), gives ONE GO, and only then does `--commit` run the mass.
+`runner.py rollback` erases a bad run in one command. Deterministic
+fills and small runs skip the ceremony.
+
+## 11. The engine — runner.py & researcher.py
+
+For per-row AI work at volume (enrich from a question, classify, extract,
+judge), skills do not iterate — they COMPILE, then delegate to the
+engine. The session model reads no row and no page; it sees a receipt.
+
+```
+skill (session): gates → writes prompts/<slug>/instructions.md + schema.json
+                 → announces budget (§8) → launches runner → relays receipts
+runner.py:       claims rows in tranches → merges {{column}} variables into
+                 the prompt per row → one researcher agent per row (parallel,
+                 capped) → validates answers → writes waves via db.py →
+                 reconciled receipt
+researcher.py:   ONE disposable agent: prompt + row data (+ Bright Data MCP
+                 when --tools web) → {"status", "fields", "evidence"}
+```
+
+The prompt files live in the workspace — `prompts/<slug>/instructions.md`
+(the mission, with `{{column}}` variables merged per row) and
+`schema.json` (`{"fields": {"telephone": "…", "prenom": "…"},
+"evidence": true}` — one field, one column; multi-column structured
+output). Human-editable, reused verbatim on re-runs.
+
+```bash
+# Preview first (writes 10 rows, tagged, then stops for the user's GO)
+python3 "${CLAUDE_PLUGIN_ROOT}/tools/runner.py" run \
+  --db <bricks.db> --table companies --claim cap_status \
+  --action agent --prompt <ws>/prompts/cap/instructions.md \
+  --schema <ws>/prompts/cap/schema.json \
+  --tools web --model haiku --max-pages 5 \
+  --run-id cap-<date> --preview 10
+
+# The mass (tranches of --limit, resumable, idempotent)
+...same command with --commit [--limit 500] [--workers 8]
+
+# Deterministic fill (zero model), undo, crash recovery
+... --action set --set segment=artisan --run-id seg-1 --commit
+python3 "${CLAUDE_PLUGIN_ROOT}/tools/runner.py" rollback --manifest <run>.manifest.json
+python3 "${CLAUDE_PLUGIN_ROOT}/tools/runner.py" release --db <db> --table companies --status-col cap_status
+```
+
+Iron facts, enforced by the engine itself:
+
+- **The database is the checkpoint** — statuses (§5) carry resume,
+  idempotence and the never-pay-twice rule; there is no side ledger.
+- **One agent = one row**: the agent's context holds its row and its
+  pages, nothing else. Volume changes the DURATION of a run, never the
+  size of any context. `--workers` is hard-capped (~10): parallel
+  agents, not parallel thousands; 10 000 web rows ≈ an overnight run —
+  announce it.
+- **Template variables are validated against the table's columns BEFORE
+  anything is claimed or spent**; a row with an empty variable fails
+  alone (`<base>_error` says why), never the run.
+- **Verified or null**: workers never invent; `not_found` is a result
+  (§5), evidence is required on `done` when the schema asks.
+- **`--tools none` is the same engine without web** — judgment on
+  existing columns; `claude -p` on the subscription by default,
+  `BRICKS_WORKER_CMD` overrides (Agent SDK, mocks).
+- researcher.py has ONE caller: runner.py. A skill never spawns workers
+  itself; a handful of rows (≲5) is handled in-session instead (§10).
