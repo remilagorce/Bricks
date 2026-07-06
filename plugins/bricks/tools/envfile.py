@@ -34,20 +34,48 @@ import sys
 
 DEFAULT_PATH = "~/.bricks/env"
 
-#: The keys the engine knows about — label + where to get them.
+#: The keys the engine knows about — label + EXACTLY how to obtain each one
+#: (`how` = the steps, `url` = clickable link, `command` = terminal command).
+#: The front's settings panel renders these verbatim; keep them precise.
 KNOWN_KEYS = [
     {"key": "ANTHROPIC_API_KEY",
-     "label": "Workers du moteur — clé API (facturation au token)",
-     "hint": "console.anthropic.com → API Keys"},
+     "label": "Workers du moteur — clé API Anthropic",
+     "hint": "console.anthropic.com → API Keys",
+     "how": "Connecte-toi (ou crée un compte), clique « Create Key », "
+            "copie la clé sk-ant-api-… et colle-la ici. Facturation au "
+            "token (workers haiku ≈ centimes). Il faut CETTE clé OU le "
+            "token abonnement ci-dessous — pas les deux.",
+     "url": "https://console.anthropic.com/settings/keys",
+     "urlLabel": "console.anthropic.com → API Keys",
+     "command": None},
     {"key": "CLAUDE_CODE_OAUTH_TOKEN",
-     "label": "Workers du moteur — abonnement Claude",
-     "hint": "Terminal : claude setup-token"},
+     "label": "Workers du moteur — abonnement Claude (alternative)",
+     "hint": "Terminal : claude setup-token",
+     "how": "Ouvre Terminal.app (Spotlight → « Terminal »), tape la "
+            "commande ci-dessous, connecte-toi dans le navigateur qui "
+            "s'ouvre, puis copie le token sk-ant-oat-… affiché et "
+            "colle-le ici. Utilise ton abonnement Claude, rien à payer "
+            "en plus.",
+     "url": None,
+     "urlLabel": None,
+     "command": "claude setup-token"},
     {"key": "FULLENRICH_API_KEY",
      "label": "FullEnrich — recherche de contacts (API)",
-     "hint": "app.fullenrich.com → Settings → API"},
+     "hint": "app.fullenrich.com → Settings → API",
+     "how": "Connecte-toi à ton compte FullEnrich, puis Settings → API → "
+            "crée/copie la clé et colle-la ici.",
+     "url": "https://app.fullenrich.com",
+     "urlLabel": "app.fullenrich.com",
+     "command": None},
     {"key": "BRIGHTDATA_API_TOKEN",
      "label": "Bright Data — web researcher",
-     "hint": "brightdata.com → compte → API token"},
+     "hint": "brightdata.com → compte → API token",
+     "how": "Connecte-toi au control panel Bright Data, puis Account "
+            "settings → API tokens → copie le token et colle-le ici. "
+            "(C'est le même token que le MCP de session utilise.)",
+     "url": "https://brightdata.com/cp",
+     "urlLabel": "brightdata.com/cp",
+     "command": None},
 ]
 
 

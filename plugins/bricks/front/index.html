@@ -315,6 +315,15 @@
   .key-label { font-size: 13px; font-weight: 600; color: var(--text); }
   .key-hint { font-size: 11.5px; color: var(--text-dim); margin-top: 2px; }
   .key-hint code { font-size: 11px; }
+  .key-how { font-size: 11.5px; color: var(--text-dim); margin-top: 6px; line-height: 1.55; }
+  .key-how a { color: var(--accent); text-decoration: none; }
+  .key-how a:hover { text-decoration: underline; }
+  .key-cmd-wrap { display: flex; align-items: center; gap: 8px; margin-top: 5px; }
+  .key-cmd {
+    display: inline-block; padding: 2px 8px; font-size: 11.5px;
+    background: var(--hover); border: 1px solid var(--border); border-radius: 6px;
+    color: var(--text);
+  }
   .key-edit { display: flex; gap: 8px; }
   .key-edit input {
     flex: 1; height: 30px; font-size: 12px; padding: 0 10px;
@@ -1503,7 +1512,16 @@ function App() {
                     <div class="key-label">${k.label}</div>
                     <div class="key-hint">
                       <code>${k.key}</code>
-                      ${k.set ? html` · configurée <code>${k.masked}</code>` : html` · manquante — ${k.hint}`}
+                      ${k.set ? html` · configurée <code>${k.masked}</code>` : html` · manquante`}
+                    </div>
+                    <div class="key-how">
+                      ${k.how}
+                      ${k.url && html` <a href=${k.url} target="_blank" rel="noreferrer">${k.urlLabel || k.url} ↗</a>`}
+                      ${k.command && html`<div class="key-cmd-wrap">
+                        <code class="key-cmd">${k.command}</code>
+                        <button class="link-btn" title="Copier la commande"
+                          onClick=${() => navigator.clipboard && navigator.clipboard.writeText(k.command)}>copier</button>
+                      </div>`}
                     </div>
                   </div>
                 </div>
