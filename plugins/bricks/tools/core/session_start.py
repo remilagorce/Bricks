@@ -11,6 +11,7 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import workspace as ws
 
 
 def main() -> int:
@@ -24,6 +25,7 @@ def main() -> int:
         # stand so it can act (or set up) when the user actually asks.
         st = workspace.status()
         lines = ["[bricks] Session context:"]
+
         if not st.get("initialized"):
             lines.append("- Bricks is not initialized in this directory (no bricks/ "
                          "yet). Nothing is created until you act. When the user asks "
@@ -32,7 +34,10 @@ def main() -> int:
             lines.append("- No current workspace. Run /bricks:workspace to create one "
                          "(new <name>), or asking for GTM work will create one.")
         else:
-            lines.append(f"- Workspace: {st['current']} (db: {st.get('db')})")
+            name = st["current"]
+            lines.append("- Current workspace below. Show this banner to the user "
+                         "VERBATIM inside a fenced code block before your first reply:")
+            lines.append(ws.banner(name))
             lines.append(f"- Tables: {', '.join(st.get('tables') or []) or 'none yet'}")
             lines.append(f"- Context files: {', '.join(st.get('context') or []) or 'none'}")
             icp = os.path.join(st.get("path", ""), "context", "icp.md")

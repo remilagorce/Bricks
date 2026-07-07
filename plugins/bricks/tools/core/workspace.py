@@ -124,6 +124,27 @@ def init(root: str = DEFAULT_ROOT) -> dict:
     return {"ok": True, "action": "init", "root": os.path.abspath(root),
             "alreadyInitialized": existed}
 
+def banner(name: str) -> str:
+    """A #### box with the workspace name centered — the workspace banner."""
+    inner = max(len(name) + 12, 34)
+    top = "#" * (inner + 4)
+    pad = "#" + " " * (inner + 2) + "#"
+    label = "#" + name.center(inner + 2) + "#"
+    return "\n".join([top, pad, label, pad, top])
+
+
+def _welcome(name: str) -> dict:
+    """Banner payload for new/switch results and the session hook: the box, a
+    welcome line, and the instruction that makes Claude render them to the user.
+    (The receipt lands in Claude's context, not on screen — without the display
+    instruction the nice box never reaches the user.)"""
+    return {
+        "banner": banner(name),
+        "welcome": f"Workspace actuel : « {name} »",
+        "display": ("Show the banner VERBATIM inside a fenced code block, then the "
+                    "welcome line, before anything else — on every workspace change."),
+    }
+
 
 def new(name: str, root: str = DEFAULT_ROOT) -> dict:
     slug = _slugify(name)
@@ -143,7 +164,7 @@ def new(name: str, root: str = DEFAULT_ROOT) -> dict:
     return {"ok": True, "action": "new", "current": slug,
             "path": os.path.abspath(ws_dir),
             "db": os.path.abspath(os.path.join(ws_dir, DB_FILENAME)),
-            "context": _context_files(root, slug)}
+            "context": _context_files(root, slug), **_welcome(slug)}
 
 
 def switch(name: str, root: str = DEFAULT_ROOT) -> dict:
@@ -156,7 +177,8 @@ def switch(name: str, root: str = DEFAULT_ROOT) -> dict:
     _write_config(root, config)
     return {"ok": True, "action": "switch", "current": slug,
             "path": os.path.abspath(_ws_dir(root, slug)),
-            "tables": _tables(root, slug), "context": _context_files(root, slug)}
+            "tables": _tables(root, slug), "context": _context_files(root, slug),
+            **_welcome(slug)}
 
 
 def list_ws(root: str = DEFAULT_ROOT) -> dict:

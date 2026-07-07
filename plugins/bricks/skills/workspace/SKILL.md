@@ -28,6 +28,19 @@ Every command prints JSON.
 | Change current workspace | `switch <name>` |
 | See all workspaces | `list` |
 
+## Banner ritual (mandatory)
+
+`new` and `switch` return a `banner` (a `####` box with the workspace name), a
+`welcome` line and a `display` instruction. After EVERY successful `new` or
+`switch`, before anything else, show the user:
+
+1. the `banner` value VERBATIM inside a fenced code block,
+2. then the `welcome` line.
+
+The receipt lands in your context, not on the user's screen — so you must
+reproduce the box yourself. The SessionStart hook shows the same banner at
+session open, so the user always knows which workspace they are in.
+
 ## Behavior rules
 
 - **No argument given** → run `status` and report: current workspace (or its
