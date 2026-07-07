@@ -1,0 +1,19 @@
+site_name: Bricks
+site_description: The open-source GTM engine for Claude Code.
+repo_url: https://github.com/remilagorce/bricks
+theme:
+  name: material
+  logo: assets/logo.svg
+  favicon: assets/logo.svg
+  palette:
+    primary: deep orange
+    accent: deep orange
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - content.code.copy
+nav:
+  - Home: index.md
+  - Quickstart: quickstart.md
+  - Find: find.md
+  - Enrich: enrich.md

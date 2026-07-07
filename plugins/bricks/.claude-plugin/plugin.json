@@ -1,0 +1,9 @@
+{
+  "name": "bricks",
+  "description": "Open-source GTM engine: find, enrich and work B2B lead lists from Claude Code, backed by a per-workspace SQLite database.",
+  "version": "0.1.2",
+  "mcpServers": "./.mcp.json",
+  "author": {
+    "name": "Rémi Lagorce & Robin Jehanno"
+  }
+}

@@ -1,0 +1,2 @@
+# docs only — the plugin itself is stdlib + claude-agent-sdk
+mkdocs-material

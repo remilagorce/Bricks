@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python3 plugins/bricks/tools/core/*)"
+    ]
+  }
+}
