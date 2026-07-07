@@ -5,6 +5,10 @@ description: Fill columns on existing rows of the current workspace database, wi
 
 # Enrich — fill columns on existing rows
 
+**Before anything, read `${CLAUDE_PLUGIN_ROOT}/CONVENTIONS.md`** — the shared
+contract every skill obeys (workspace, context gate, the only door, the iron
+gate, the two enrichment modes A/B in §6).
+
 ONE execution path only: `runner.py` → `agent.py`. Never iterate rows in the
 conversation, never fetch pages per row in the session.
 

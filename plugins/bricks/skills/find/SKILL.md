@@ -5,6 +5,10 @@ description: Find companies and contacts matching an ICP and write them into the
 
 # Find — source companies & contacts
 
+**Before anything, read `${CLAUDE_PLUGIN_ROOT}/CONVENTIONS.md`** — the shared
+contract every skill obeys (workspace, context gate, the only door, the iron
+gate). The gates below are the find-specific application of it.
+
 ## Gates (before anything)
 
 1. `python3 "${CLAUDE_PLUGIN_ROOT}/tools/core/workspace.py" status` — if there is

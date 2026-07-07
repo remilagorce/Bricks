@@ -11,6 +11,14 @@ callable BOTH as a CLI and as importable functions; `skills/` are the
 instruction manuals that tell the AI how to act and how to drive the
 application through those tools.
 
+**Two audiences, two contracts.** This `CLAUDE.md` is for whoever *builds and
+maintains* the repo (you, right now). `plugins/bricks/CONVENTIONS.md` is the
+*runtime* contract every skill reads before acting (workspace resolution,
+context gate, the only door, the iron gate). Keep CONVENTIONS.md short — when a
+rule outgrows a few lines it belongs in a tool or a skill, not there. The Bricks
+root is initialized once by the SessionStart hook (`workspace.py init`), so no
+skill ever checks-and-inits.
+
 ## Rule 1 — logic lives in tools, never in skills
 
 Always reuse the existing functions first. When a new need appears (e.g. a

@@ -16,6 +16,11 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 def main() -> int:
     try:
         import workspace
+        # Ensure the Bricks root exists once, here, so no skill ever has to
+        # check-and-init. Idempotent: a no-op after the first session. This is
+        # the practical "at install" init — Claude Code has no install event,
+        # SessionStart is the earliest hook that runs once the plugin is active.
+        workspace.init()
         st = workspace.status()
         lines = ["[bricks] Session context:"]
         if not st.get("current"):

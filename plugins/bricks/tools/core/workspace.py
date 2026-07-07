@@ -11,10 +11,14 @@ Layout (data root ./bricks in the working directory, override with --root):
 This script owns config.json — skills never edit it by hand.
 
 CLI (JSON on stdout; on error JSON on stderr + exit 1):
+    python3 workspace.py [--root bricks] init      # create the root (idempotent)
     python3 workspace.py [--root bricks] new <name>
     python3 workspace.py [--root bricks] switch <name>
     python3 workspace.py [--root bricks] list
     python3 workspace.py [--root bricks] status
+
+`init` is called automatically by the SessionStart hook, so the root always
+exists — skills never need to run it themselves.
 """
 
 from __future__ import annotations
@@ -107,6 +111,18 @@ def _context_files(root: str, slug: str) -> list[str]:
 # Commands
 # --------------------------------------------------------------------------
 
+def init(root: str = DEFAULT_ROOT) -> dict:
+    """Create the Bricks root and config.json if missing. Idempotent — safe to
+    call on every session start (SessionStart hook). Creates no workspace; it
+    only makes the root exist so skills never have to check for it."""
+    existed = os.path.isfile(_config_path(root))
+    os.makedirs(os.path.join(root, "workspaces"), exist_ok=True)
+    if not existed:
+        _write_config(root, {"current": None})
+    return {"ok": True, "action": "init", "root": os.path.abspath(root),
+            "alreadyInitialized": existed}
+
+
 def new(name: str, root: str = DEFAULT_ROOT) -> dict:
     slug = _slugify(name)
     ws_dir = _ws_dir(root, slug)
@@ -182,6 +198,7 @@ def main(argv=None) -> int:
         p.add_argument("name")
     sub.add_parser("list")
     sub.add_parser("status")
+    sub.add_parser("init")
     args = parser.parse_args(argv)
     try:
         if args.command == "new":
@@ -190,6 +207,8 @@ def main(argv=None) -> int:
             result = switch(args.name, args.root)
         elif args.command == "list":
             result = list_ws(args.root)
+        elif args.command == "init":
+            result = init(args.root)
         else:
             result = status(args.root)
     except WorkspaceError as exc:

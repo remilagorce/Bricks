@@ -6,6 +6,9 @@ user-invocable: true
 
 # Tools guide — how to call each Bricks script
 
+The shared runtime contract is `${CLAUDE_PLUGIN_ROOT}/CONVENTIONS.md` — this
+guide is the tool-by-tool reference behind it.
+
 All scripts live under `${CLAUDE_PLUGIN_ROOT}/tools/core/`. Every script prints
 **JSON on stdout** (errors on stderr, exit 1). Skills orchestrate; tools execute.
 

@@ -6,6 +6,9 @@ argument-hint: "new <name> | switch <name> | list | status | (nothing)"
 
 # Workspace — create, switch, inspect
 
+**Before anything, read `${CLAUDE_PLUGIN_ROOT}/CONVENTIONS.md`** — the shared
+contract every skill obeys (§2 covers workspace resolution).
+
 Manages the Bricks data root (`bricks/` in the current working directory) and
 the current-workspace pointer in `bricks/config.json`. Never create or edit
 these files by hand — always through the tool:
