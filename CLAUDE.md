@@ -16,8 +16,9 @@ maintains* the repo (you, right now). `plugins/bricks/CONVENTIONS.md` is the
 *runtime* contract every skill reads before acting (workspace resolution,
 context gate, the only door, the iron gate). Keep CONVENTIONS.md short — when a
 rule outgrows a few lines it belongs in a tool or a skill, not there. The Bricks
-root is initialized once by the SessionStart hook (`workspace.py init`), so no
-skill ever checks-and-inits.
+root is created lazily on the first GTM action (`workspace.py new`); the
+SessionStart hook only REPORTS whether the current directory is set up — it
+never creates anything, to avoid littering unrelated directories.
 
 ## Rule 1 — logic lives in tools, never in skills
 

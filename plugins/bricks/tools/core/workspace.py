@@ -17,8 +17,10 @@ CLI (JSON on stdout; on error JSON on stderr + exit 1):
     python3 workspace.py [--root bricks] list
     python3 workspace.py [--root bricks] status
 
-`init` is called automatically by the SessionStart hook, so the root always
-exists — skills never need to run it themselves.
+`new` creates the root on its own, so `init` is rarely needed by hand — it
+exists as an explicit way to set up an empty root without a workspace yet. The
+SessionStart hook never calls it: initialization is lazy, on the first GTM
+action, so unrelated directories stay clean.
 """
 
 from __future__ import annotations

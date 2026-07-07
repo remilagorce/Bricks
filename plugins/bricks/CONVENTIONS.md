@@ -17,15 +17,16 @@ goes through a file, not the context.
 
 ## §2 — Workspace resolution
 
-The Bricks root (`bricks/` in the working directory) is auto-initialized by the
-SessionStart hook, so `bricks/config.json` always exists — you NEVER run `init`.
-Begin any GTM action with:
+The Bricks root (`bricks/` in the working directory) is created LAZILY, on the
+first GTM action — nothing is created just by opening a session. Begin any GTM
+action with:
 
     python3 "${CLAUDE_PLUGIN_ROOT}/tools/core/workspace.py" status
 
-- No **current workspace** → create one (`new <slug>`) or `switch` to one. If
-  the user's request implies a name (client, campaign, project), create it
-  without asking first.
+- Not initialized here, or no **current workspace** → create one (`new <slug>`,
+  which also creates the root) or `switch` to an existing one. If the user's
+  request implies a name (client, campaign, project), create it without asking
+  first.
 - Never edit `config.json` or any workspace file by hand — go through
   `workspace.py`.
 

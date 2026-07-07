@@ -16,16 +16,21 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 def main() -> int:
     try:
         import workspace
-        # Ensure the Bricks root exists once, here, so no skill ever has to
-        # check-and-init. Idempotent: a no-op after the first session. This is
-        # the practical "at install" init — Claude Code has no install event,
-        # SessionStart is the earliest hook that runs once the plugin is active.
-        workspace.init()
+        # Report state only — never create anything here. Bricks stores GTM data
+        # in a ./bricks/ folder in the working directory; creating it eagerly on
+        # every session would litter unrelated directories. Initialization is
+        # LAZY: the workspace skill creates the root + workspace on the first GTM
+        # action, in the right place. This hook just tells Claude where things
+        # stand so it can act (or set up) when the user actually asks.
         st = workspace.status()
         lines = ["[bricks] Session context:"]
-        if not st.get("current"):
-            lines.append("- No current workspace. If the user asks for GTM work, "
-                         "create one first: workspace.py new <name>.")
+        if not st.get("initialized"):
+            lines.append("- Bricks is not initialized in this directory (no bricks/ "
+                         "yet). Nothing is created until you act. When the user asks "
+                         "for GTM work, /bricks:workspace sets it up here.")
+        elif not st.get("current"):
+            lines.append("- No current workspace. Run /bricks:workspace to create one "
+                         "(new <name>), or asking for GTM work will create one.")
         else:
             lines.append(f"- Workspace: {st['current']} (db: {st.get('db')})")
             lines.append(f"- Tables: {', '.join(st.get('tables') or []) or 'none yet'}")
