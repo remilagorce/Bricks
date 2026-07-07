@@ -49,24 +49,11 @@ class AgentError(RuntimeError):
     """The agent could not be configured or could not produce an answer."""
 
 
-def _load_env() -> None:
-    """~/.bricks/env (override BRICKS_ENV_FILE): KEY=value lines, '#' comments.
-    Never overrides a variable already present in the environment."""
-    path = os.environ.get("BRICKS_ENV_FILE") or os.path.expanduser("~/.bricks/env")
-    if not os.path.isfile(path):
-        return
-    with open(path, encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if not line or line.startswith("#") or "=" not in line:
-                continue
-            key, value = line.split("=", 1)
-            key, value = key.strip(), value.strip()
-            if key and value and key not in os.environ:
-                os.environ[key] = value
-
-
-_load_env()
+# Self-load ~/.bricks/env before anything runs (subscription token, Bright Data
+# token…). Same loader the front's settings panel writes to — one source of truth.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import envfile  # noqa: E402
+envfile.load()
 
 
 def _sdk():

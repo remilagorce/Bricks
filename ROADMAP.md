@@ -3,11 +3,13 @@
 One block = one deliverable with a clear IN → OUT contract. A block ships
 small, proves itself in real runs, then the next one starts.
 
-## v0.1 — the core (shipped)
+## v0.1–0.2 — the core + UI (shipped)
 
-- `tools/core/` : workspace.py, db.py, agent.py, runner.py, session_start.py
-- Skills : `find` (source companies/contacts), `enrich` (fill columns via
-  runner → agent)
+- `tools/core/` : workspace.py, db.py, agent.py, runner.py, envfile.py,
+  session_start.py
+- Skills : `find`, `enrich`, `workspace`, `tools-guide`, `interface`
+- Front (UI) : `front/server.py` + `index.html` — local Clay-like table view,
+  row deletion and engine-keys panel, reusing the core tools directly
 - MCP bundled : FullEnrich (OAuth), Bright Data (token)
 - Iron gate : preview 10 rows → GO → commit, statuses as checkpoint
 
@@ -17,7 +19,6 @@ small, proves itself in real runs, then the next one starts.
 |---|---|---|
 | transform | existing table → cleaned/deduped/derived columns, zero external fetch | todo |
 | score | rows + natural-language rules → score column | todo |
-| front (UI) | bricks.db → local Clay-like table view (imports db.py/workspace.py directly) | todo |
 | outreach | enriched rows + context/ → draft messages (draft/approved/sent statuses) | todo |
 | rollback & manifests | committed run → undo (only if real runs prove the need) | todo |
 | more skills from v0 (scan-mentions, find-company-people, ...) | ported one by one when a real workflow needs them | todo |

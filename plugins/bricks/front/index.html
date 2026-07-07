@@ -1,0 +1,1529 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Bricks</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect x=%2210%22 y=%2210%22 width=%2280%22 height=%2280%22 rx=%2214%22 fill=%22%23ff5722%22/></svg>" />
+<style>
+  :root, :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #121212;
+    --card: #171717;
+    --border: #2a2a2a;
+    --border-soft: #222222;
+    --border-strong: #333333;
+    --hover: #1c1c1c;
+    --text: #dddddd;
+    --text-dim: #888888;
+    --text-faint: #666666;
+    --accent: #ff5722;
+    --accent-soft: rgba(255, 87, 34, .12);
+    --danger: #ef4444;
+    --radius: 12px;
+  }
+  :root[data-theme="light"] {
+    color-scheme: light;
+    --bg: #f4f4f2;
+    --card: #ffffff;
+    --border: #e3e3df;
+    --border-soft: #ededea;
+    --border-strong: #d6d6d0;
+    --hover: #f0f0ec;
+    --text: #1d1d1b;
+    --text-dim: #6b6b66;
+    --text-faint: #9a9a93;
+    --accent: #ff5722;
+    --accent-soft: rgba(255, 87, 34, .10);
+    --danger: #dc2626;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 14px/1.45 "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  #root { height: 100%; }
+
+  .app { display: flex; flex-direction: column; height: 100%; }
+
+  /* ---- top bar ---- */
+  .topbar {
+    display: flex; align-items: center; gap: 14px;
+    height: 54px; padding: 0 20px;
+    background: var(--card); border-bottom: 1px solid var(--border);
+    flex: none;
+  }
+  .brand { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 15px; letter-spacing: -0.01em; color: var(--text); }
+  .brand .logo { color: var(--accent); font-size: 15px; }
+  .topbar .sep { width: 1px; height: 22px; background: var(--border); flex: none; }
+  .topbar .spacer { flex: 1; }
+  .meta { font-size: 12px; color: var(--text-faint); font-variant-numeric: tabular-nums; }
+  .icon-btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 30px; height: 30px; border-radius: 8px;
+    border: 1px solid var(--border); background: var(--card);
+    color: var(--text-dim); cursor: pointer; font-size: 14px;
+    transition: background .12s, color .12s;
+  }
+  .icon-btn:hover { background: var(--hover); color: var(--text); }
+  .icon-btn.spinning { animation: spin .7s linear infinite; pointer-events: none; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ---- workspace switcher (pills in the header) ---- */
+  .ws-bar {
+    display: flex; align-items: center; gap: 6px;
+    min-width: 0; overflow-x: auto; scrollbar-width: none;
+  }
+  .ws-bar::-webkit-scrollbar { display: none; }
+  .ws-tab {
+    flex: none;
+    display: inline-flex; align-items: center; gap: 7px;
+    border: 1px solid var(--border); background: var(--card);
+    color: var(--text-dim); cursor: pointer; font-family: inherit;
+    padding: 6px 13px; border-radius: 999px;
+    font-size: 12.5px; font-weight: 500;
+    transition: background .12s, color .12s, border-color .12s;
+  }
+  .ws-tab:hover { background: var(--hover); color: var(--text); }
+  .ws-tab.active { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); font-weight: 600; }
+  .ws-tab:disabled { cursor: default; }
+  .ws-tab:disabled:not(.active) { opacity: .55; }
+  .ws-tab .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; opacity: .45; }
+  .ws-tab.active .dot { background: var(--accent); opacity: 1; }
+  .ws-tab.switching .dot { animation: ws-pulse .8s ease-in-out infinite; }
+  @keyframes ws-pulse { 0%, 100% { opacity: .3; } 50% { opacity: 1; } }
+
+  /* ---- tabs (test-ee style: flat, orange bar on active) ---- */
+  .tabs { display: flex; align-items: center; gap: 2px; padding: 8px 20px 0; flex: none; }
+  .tab {
+    border: none; background: none;
+    padding: 9px 15px; border-radius: 0;
+    border-bottom: 2px solid transparent;
+    font-size: 13px; font-weight: 500; color: var(--text-dim);
+    cursor: pointer; transition: color .12s, border-color .12s; font-family: inherit;
+  }
+  .tab:hover { color: var(--text); }
+  .tab.active { color: var(--text); font-weight: 600; border-bottom-color: var(--accent); }
+  .tab .count { color: var(--text-faint); font-weight: 400; margin-left: 6px; font-variant-numeric: tabular-nums; }
+
+  /* ---- table card ---- */
+  .table-zone { flex: 1; min-height: 0; padding: 12px 20px 20px; display: flex; flex-direction: column; }
+  .card {
+    flex: 1; min-height: 0; display: flex; flex-direction: column;
+    background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, .3), 0 8px 24px -12px rgba(0, 0, 0, .4);
+    overflow: hidden;
+  }
+  .grid-scroll { flex: 1; overflow: auto; }
+  table { border-collapse: separate; border-spacing: 0; min-width: 100%; }
+  .table-toolbar {
+    flex: none; display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    padding: 10px 14px; border-bottom: 1px solid var(--border-soft);
+  }
+  .table-toolbar .search-wrap { flex: 1; min-width: 200px; max-width: 360px; }
+  .table-toolbar .search-wrap input { height: 32px; font-size: 12.5px; }
+  .toolbar-meta { font-size: 12px; color: var(--text-faint); font-variant-numeric: tabular-nums; }
+  .btn-toolbar {
+    display: inline-flex; align-items: center; gap: 5px;
+    height: 32px; padding: 0 12px; border-radius: 8px;
+    border: 1px solid var(--border); background: var(--card);
+    color: var(--text-dim); cursor: pointer; font-size: 12.5px; font-weight: 500;
+    font-family: inherit; transition: background .12s, color .12s, border-color .12s;
+  }
+  .btn-toolbar:hover { background: var(--hover); color: var(--text); }
+  .btn-toolbar.active { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+  .btn-toolbar:disabled { opacity: .45; cursor: default; }
+
+  thead th {
+    position: sticky; top: 0; z-index: 2;
+    background: var(--hover); text-align: left;
+    font-size: 11.5px; font-weight: 600; letter-spacing: .03em; text-transform: none;
+    color: var(--text-dim);
+    padding: 0 14px; height: 38px; vertical-align: middle;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  thead.has-filters th { top: 0; }
+  thead tr.filter-row th {
+    top: 38px; z-index: 2; height: 36px; padding: 0 8px;
+    background: var(--card); border-bottom: 1px solid var(--border);
+  }
+  thead th.sortable { cursor: pointer; user-select: none; }
+  thead th.sortable:hover { color: var(--text); background: var(--card); }
+  thead th.sorted { color: var(--text); }
+  thead th .th-inner { display: inline-flex; align-items: center; gap: 5px; max-width: 100%; }
+  thead th .type-ico { color: var(--text-faint); font-weight: 500; font-size: 11px; flex: none; }
+  thead th.sorted .type-ico { color: var(--accent); }
+  thead th .sort-ico {
+    flex: none; font-size: 10px; line-height: 1; color: var(--text-faint);
+    opacity: 0; transition: opacity .12s, color .12s;
+  }
+  thead th.sortable:hover .sort-ico, thead th.sorted .sort-ico { opacity: 1; }
+  thead th.sorted .sort-ico { color: var(--accent); }
+  .col-filter {
+    width: 100%; height: 26px; padding: 0 8px; border-radius: 6px;
+    border: 1px solid var(--border); background: var(--bg);
+    color: var(--text); font-size: 11.5px; font-family: inherit; outline: none;
+  }
+  .col-filter:focus { border-color: var(--accent); }
+  .col-filter::placeholder { color: var(--text-faint); }
+  tbody td {
+    padding: 0 14px; height: 40px; vertical-align: middle;
+    font-size: 13px;
+    border-bottom: 1px solid var(--border-soft);
+    white-space: nowrap; max-width: 340px; overflow: hidden; text-overflow: ellipsis;
+  }
+  tbody tr { transition: background .08s; }
+  tbody tr:hover { background: var(--hover); }
+  tbody tr.selected { background: var(--accent-soft); }
+  tbody tr.selected td { border-bottom-color: rgba(255, 87, 34, .25); }
+
+  th.col-check, td.col-check { width: 40px; min-width: 40px; padding: 0 0 0 14px; }
+  th.col-num, td.col-num { width: 44px; min-width: 44px; text-align: right; padding-right: 10px; }
+  td.col-num { color: var(--text-faint); font-size: 11.5px; font-variant-numeric: tabular-nums; }
+  input[type="checkbox"] {
+    width: 15px; height: 15px; accent-color: var(--accent); cursor: pointer;
+    display: block;
+  }
+
+  .cell-empty { color: var(--text-faint); }
+  a.cell-link {
+    color: #ff8a65; text-decoration: none;
+    background: var(--accent-soft); border-radius: 6px; padding: 3px 8px;
+    font-size: 12.5px; font-weight: 500;
+  }
+  a.cell-link:hover { text-decoration: underline; }
+  .cell-num { font-variant-numeric: tabular-nums; }
+
+  /* ---- status chips (test-ee vocabulary) ---- */
+  .chip {
+    display: inline-block; padding: 1px 8px; border-radius: 999px;
+    font-size: 11px; background: #26262b; color: #9ca3af;
+  }
+  .s-pending { background: #26262b; color: #9ca3af; }
+  .s-running { background: #3a2b0a; color: #fbbf24; }
+  .s-done, .s-approved { background: #0d2f1b; color: #4ade80; }
+  .s-failed { background: #3b0d0d; color: #f87171; }
+  .s-not_found { background: #26262b; color: #6b7280; }
+  .s-disqualified { background: #3b0d0d; color: #ef4444; }
+  .s-draft { background: #12233f; color: #60a5fa; }
+  .s-sent { background: #0d2f2b; color: #2dd4bf; }
+  .s-new { background: #26262b; color: #9ca3af; }
+
+  .card-footer {
+    flex: none; display: flex; align-items: center; gap: 8px;
+    padding: 8px 16px; border-top: 1px solid var(--border-soft);
+    font-size: 12px; color: var(--text-faint); font-variant-numeric: tabular-nums;
+  }
+
+  /* ---- floating action bar ---- */
+  .action-bar {
+    position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%);
+    display: flex; align-items: center; gap: 14px;
+    background: #1c1c1c; color: #fff;
+    border: 1px solid #333;
+    padding: 10px 10px 10px 20px; border-radius: 999px;
+    box-shadow: 0 12px 32px -8px rgba(0, 0, 0, .6);
+    animation: rise .18s ease-out;
+    z-index: 10;
+  }
+  @keyframes rise { from { opacity: 0; transform: translate(-50%, 10px); } to { opacity: 1; transform: translate(-50%, 0); } }
+  .action-bar .sel-count { font-size: 13px; font-weight: 500; }
+  .action-bar .link-btn {
+    background: none; border: none; color: #888; font-size: 12.5px;
+    cursor: pointer; font-family: inherit; padding: 0;
+  }
+  .action-bar .link-btn:hover { color: #fff; }
+  .btn-danger {
+    border: none; cursor: pointer; font-family: inherit;
+    background: var(--danger); color: #fff;
+    font-size: 13px; font-weight: 600;
+    padding: 9px 18px; border-radius: 999px;
+    transition: background .12s;
+  }
+  .btn-danger:hover { background: #dc2626; }
+  .btn-danger:disabled { opacity: .6; cursor: default; }
+
+  /* ---- states ---- */
+  .state { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; color: var(--text-dim); }
+  .state .big { font-size: 34px; }
+  .state .title { font-weight: 600; color: var(--text); font-size: 15px; }
+  .state code { background: var(--hover); border: 1px solid var(--border-strong); border-radius: 6px; padding: 2px 8px; font-size: 12.5px; }
+  .error-banner {
+    margin: 12px 20px 0; padding: 10px 16px;
+    background: #3b0d0d; border: 1px solid #5c1a1a; border-radius: 10px;
+    color: #f87171; font-size: 13px;
+  }
+
+  /* ---- export button + modal ---- */
+  .btn-export {
+    display: inline-flex; align-items: center; gap: 6px;
+    height: 30px; padding: 0 14px; border-radius: 8px;
+    border: 1px solid var(--border); background: var(--card);
+    color: var(--text); cursor: pointer; font-size: 13px; font-weight: 500;
+    font-family: inherit; transition: background .12s, border-color .12s;
+  }
+  .btn-export:hover { background: var(--hover); border-color: var(--border-strong); }
+  .btn-export:disabled { opacity: .5; cursor: default; }
+
+  .modal-overlay {
+    position: fixed; inset: 0; z-index: 50;
+    background: rgba(0, 0, 0, .55);
+    display: flex; align-items: center; justify-content: center;
+    animation: fade .12s ease-out;
+  }
+  @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+  .modal {
+    width: 400px; max-width: calc(100vw - 40px);
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: 0 20px 60px -12px rgba(0, 0, 0, .7);
+    padding: 20px; animation: rise2 .15s ease-out;
+  }
+  @keyframes rise2 { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+  .modal-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .modal-head h3 { margin: 0; font-size: 15px; font-weight: 600; color: var(--text); }
+  .modal-sub { margin: 6px 0 16px; font-size: 12.5px; color: var(--text-dim); }
+  .export-opts { display: flex; gap: 12px; }
+  .export-opt {
+    flex: 1; display: flex; flex-direction: column; gap: 4px;
+    padding: 16px 14px; border-radius: 10px;
+    border: 1px solid var(--border); background: var(--hover);
+    cursor: pointer; font-family: inherit; text-align: left;
+    transition: border-color .12s, background .12s;
+  }
+  .export-opt:hover { border-color: var(--accent); background: var(--accent-soft); }
+  .export-opt:disabled { opacity: .6; cursor: default; }
+  .export-opt .fmt { font-size: 15px; font-weight: 600; color: var(--text); }
+  .export-opt .fmt-desc { font-size: 11.5px; color: var(--text-dim); }
+
+  /* ---- settings (engine API keys) ---- */
+  .modal-settings { width: 520px; }
+  .key-row {
+    display: flex; flex-direction: column; gap: 8px;
+    padding: 12px 0; border-top: 1px solid var(--border-soft);
+  }
+  .key-info { display: flex; align-items: flex-start; gap: 10px; }
+  .key-dot { width: 8px; height: 8px; border-radius: 50%; margin-top: 5px; flex: none; }
+  .key-dot.ok { background: #3fb950; }
+  .key-dot.missing { background: var(--text-faint); }
+  .key-text { min-width: 0; }
+  .key-label { font-size: 13px; font-weight: 600; color: var(--text); }
+  .key-hint { font-size: 11.5px; color: var(--text-dim); margin-top: 2px; }
+  .key-hint code { font-size: 11px; }
+  .key-edit { display: flex; gap: 8px; }
+  .key-edit input {
+    flex: 1; height: 30px; font-size: 12px; padding: 0 10px;
+    border: 1px solid var(--border); border-radius: 7px;
+    background: var(--hover); color: var(--text); font-family: inherit;
+  }
+  .key-edit input:focus { outline: none; border-color: var(--accent); }
+  .settings-error {
+    margin: 0 0 12px; padding: 8px 10px; border-radius: 7px; font-size: 12px;
+    background: rgba(248, 81, 73, .12); color: #f85149;
+    border: 1px solid rgba(248, 81, 73, .35);
+  }
+
+  /* ---- layout: sidebar + main ---- */
+  .main { flex: 1; min-height: 0; display: flex; }
+  .content { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .sidebar {
+    flex: none; width: 210px;
+    background: var(--card); border-right: 1px solid var(--border);
+    padding: 12px 10px; display: flex; flex-direction: column; gap: 2px;
+  }
+  .sidebar.closed { display: none; }
+  .nav-item {
+    display: flex; align-items: center; gap: 10px;
+    border: none; background: none; width: 100%;
+    padding: 9px 12px; border-radius: 8px;
+    font-size: 13px; font-weight: 500; color: var(--text-dim);
+    cursor: pointer; font-family: inherit; text-align: left;
+    transition: background .12s, color .12s;
+  }
+  .nav-item:hover { background: var(--hover); color: var(--text); }
+  .nav-item.active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+  .nav-item .nav-ico { width: 18px; text-align: center; font-size: 14px; }
+
+  /* ---- page (campaigns / settings) ---- */
+  .page { flex: 1; min-height: 0; overflow: auto; padding: 20px; }
+  .page-inner { max-width: 960px; margin: 0 auto; }
+  .page-head { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; }
+  .page-head h2 { margin: 0; font-size: 18px; font-weight: 600; letter-spacing: -0.01em; }
+  .page-head .spacer { flex: 1; }
+  .btn-ghost {
+    display: inline-flex; align-items: center; gap: 7px;
+    height: 32px; padding: 0 14px; border-radius: 8px;
+    border: 1px solid var(--border); background: var(--card);
+    color: var(--text); cursor: pointer; font-size: 13px; font-weight: 500;
+    font-family: inherit; transition: background .12s, border-color .12s;
+  }
+  .btn-ghost:hover { background: var(--hover); border-color: var(--border-strong); }
+  .btn-accent {
+    display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+    border: none; cursor: pointer; font-family: inherit;
+    background: var(--accent); color: #fff;
+    font-size: 13px; font-weight: 600;
+    height: 34px; padding: 0 18px; border-radius: 8px;
+    transition: filter .12s;
+  }
+  .btn-accent:hover { filter: brightness(1.08); }
+  .btn-plus {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 32px; height: 32px; border-radius: 8px;
+    border: none; background: var(--accent); color: #fff;
+    font-size: 18px; line-height: 1; cursor: pointer;
+    transition: filter .12s;
+  }
+  .btn-plus:hover { filter: brightness(1.08); }
+  .back-btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    border: none; background: none; padding: 0;
+    color: var(--text-dim); font-size: 13px; font-weight: 500;
+    cursor: pointer; font-family: inherit;
+  }
+  .back-btn:hover { color: var(--text); }
+
+  /* ---- campaigns list ---- */
+  .campaign-list { display: flex; flex-direction: column; gap: 8px; }
+  .campaign-row {
+    display: flex; align-items: center; gap: 14px;
+    background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+    padding: 14px 18px; cursor: pointer;
+    transition: border-color .12s, background .12s;
+  }
+  .campaign-row:hover { border-color: var(--border-strong); background: var(--hover); }
+  .campaign-row .c-name { font-size: 14px; font-weight: 600; }
+  .campaign-row .c-meta { font-size: 12px; color: var(--text-faint); margin-left: auto; font-variant-numeric: tabular-nums; }
+  .empty-campaigns {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 8px; padding: 70px 20px; color: var(--text-dim);
+    border: 1px dashed var(--border-strong); border-radius: var(--radius);
+  }
+  .empty-campaigns .big { font-size: 30px; }
+
+  /* ---- settings form ---- */
+  .form-card {
+    background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, .2);
+    padding: 22px 24px;
+  }
+  .form-card-head { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 20px; }
+  .form-card-head .fc-ico {
+    width: 36px; height: 36px; border-radius: 9px; flex: none;
+    background: var(--accent-soft); color: var(--accent);
+    display: inline-flex; align-items: center; justify-content: center; font-size: 16px;
+  }
+  .form-card-head h3 { margin: 0; font-size: 16px; font-weight: 600; }
+  .form-card-head .fc-summary { margin-left: auto; text-align: right; font-size: 11.5px; color: var(--text-faint); line-height: 1.6; }
+  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px 22px; }
+  .form-grid .full { grid-column: 1 / -1; }
+  .field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+  .field label { font-size: 12px; font-weight: 500; color: var(--text-dim); }
+  .field input[type="text"], .field select {
+    height: 38px; padding: 0 12px; border-radius: 8px;
+    border: 1px solid var(--border); background: var(--bg);
+    color: var(--text); font-size: 13px; font-family: inherit;
+    outline: none; transition: border-color .12s; width: 100%;
+  }
+  .field input[type="text"]:focus, .field select:focus { border-color: var(--accent); }
+  .input-wrap { position: relative; }
+  .input-wrap input { padding-right: 105px !important; }
+  .input-wrap .suffix {
+    position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
+    font-size: 11.5px; color: var(--accent); pointer-events: none;
+  }
+  .check-row { display: flex; flex-wrap: wrap; gap: 14px 18px; align-items: center; }
+  .check-item {
+    display: inline-flex; align-items: center; gap: 7px;
+    font-size: 13px; color: var(--text); cursor: pointer; user-select: none;
+  }
+  .check-item.off { color: var(--text-faint); }
+  .hours-row { display: flex; gap: 16px; }
+  .hours-row .field { flex: 1; }
+  .form-section { margin-top: 22px; padding-top: 20px; border-top: 1px solid var(--border-soft); }
+  .form-section .sec-title { font-size: 13px; font-weight: 600; margin-bottom: 12px; }
+  .form-actions { margin-top: 24px; }
+
+  /* ---- accordion sections (campaign page) ---- */
+  .acc {
+    background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, .2); margin-bottom: 14px;
+  }
+  .acc-head { display: flex; align-items: center; gap: 14px; padding: 15px 20px; cursor: pointer; user-select: none; }
+  .acc-ico {
+    width: 38px; height: 38px; border-radius: 9px; flex: none;
+    display: inline-flex; align-items: center; justify-content: center; font-size: 17px;
+  }
+  .acc-ico.orange { background: var(--accent-soft); color: var(--accent); }
+  .acc-ico.yellow { background: rgba(245, 158, 11, .14); color: #f59e0b; }
+  .acc-ico.green  { background: rgba(34, 197, 94, .14); color: #22c55e; }
+  .acc-title { font-size: 15px; font-weight: 600; }
+  .acc-summary { margin-left: auto; text-align: right; font-size: 11.5px; color: var(--text-faint); line-height: 1.6; max-width: 380px; }
+  .acc-chevron { flex: none; color: var(--text-dim); font-size: 12px; transition: transform .15s; }
+  .acc.open .acc-chevron { transform: rotate(180deg); }
+  .acc-body { border-top: 1px solid var(--border-soft); padding: 20px; }
+
+  /* ---- switch toggle ---- */
+  .switch { position: relative; display: inline-block; width: 36px; height: 20px; flex: none; }
+  .switch input { opacity: 0; width: 0; height: 0; position: absolute; }
+  .switch .track { position: absolute; inset: 0; border-radius: 999px; background: var(--border-strong); transition: background .15s; }
+  .switch .track::after {
+    content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px;
+    border-radius: 50%; background: #fff; transition: transform .15s;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, .3);
+  }
+  .switch input:checked + .track { background: var(--accent); }
+  .switch input:checked + .track::after { transform: translateX(16px); }
+
+  /* ---- mail d'envoi section ---- */
+  .mail-center { display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center; }
+  .mail-toggle-row { display: flex; align-items: center; gap: 10px; font-size: 13px; font-weight: 600; }
+  .mail-hint { font-size: 12px; color: var(--text-dim); }
+  .mail-select { min-width: 280px; height: 38px; padding: 0 12px; border-radius: 8px;
+    border: 1px solid var(--border); background: var(--bg); color: var(--text);
+    font-size: 13px; font-family: inherit; outline: none; margin-top: 8px; }
+  .mail-select:focus { border-color: var(--accent); }
+  .ou-divider { font-size: 13px; font-weight: 700; margin: 12px 0 2px; }
+  .connect-title { font-size: 13.5px; font-weight: 700; }
+  .provider-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; width: 100%; margin-top: 12px; }
+  .provider-card {
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
+    padding: 22px 12px; border: 1px solid var(--border); border-radius: 10px;
+    background: var(--bg); cursor: pointer; font-family: inherit;
+    font-size: 12.5px; line-height: 1.4; color: var(--text); text-align: center;
+    transition: border-color .12s, background .12s;
+  }
+  .provider-card:hover { border-color: var(--accent); background: var(--accent-soft); }
+  .provider-card .p-ico { font-size: 22px; font-weight: 700; line-height: 1; }
+
+  /* ---- contacts section ---- */
+  .contacts-bar { display: flex; align-items: center; gap: 14px; margin-bottom: 14px; flex-wrap: wrap; }
+  .link-action {
+    background: none; border: none; padding: 0;
+    color: var(--accent); font-size: 12.5px; font-weight: 500;
+    cursor: pointer; font-family: inherit; opacity: .6; transition: opacity .12s;
+  }
+  .link-action:hover { opacity: 1; }
+  .search-wrap { position: relative; flex: 1; min-width: 180px; }
+  .search-wrap input {
+    width: 100%; height: 36px; padding: 0 34px 0 12px; border-radius: 8px;
+    border: 1px solid var(--border); background: var(--bg); color: var(--text);
+    font-size: 13px; font-family: inherit; outline: none; transition: border-color .12s;
+  }
+  .search-wrap input:focus { border-color: var(--accent); }
+  .search-wrap .search-ico { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); color: var(--accent); font-size: 13px; pointer-events: none; }
+  .count-chip {
+    display: inline-flex; align-items: center; gap: 7px; height: 36px; padding: 0 12px;
+    border: 1px solid var(--border); border-radius: 8px; font-size: 13px; color: var(--text-dim);
+  }
+  .count-chip .n {
+    display: inline-flex; align-items: center; justify-content: center;
+    min-width: 20px; height: 20px; border-radius: 50%;
+    border: 1px solid var(--border-strong); font-size: 11px; font-variant-numeric: tabular-nums;
+  }
+  .contacts-empty {
+    border: 1px solid var(--border); border-radius: 10px; background: var(--bg);
+    padding: 48px 20px; text-align: center; font-size: 13px; font-weight: 600;
+  }
+
+  /* ---- sequence section ---- */
+  .steps-row { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 16px; }
+  .step-card {
+    width: 170px; border: 1px solid var(--border); border-radius: 10px; overflow: hidden;
+    cursor: pointer; background: var(--bg); text-align: left; padding: 0; font-family: inherit;
+    display: flex; flex-direction: column; transition: border-color .12s;
+  }
+  .step-card:hover { border-color: var(--border-strong); }
+  .step-card.active { border-color: var(--accent); }
+  .step-card .st-body { display: block; padding: 12px 12px 14px; flex: 1; min-width: 0; }
+  .step-card .st-name { display: block; font-size: 12.5px; font-weight: 600; color: var(--text); margin-bottom: 4px; }
+  .step-card .st-subject { display: block; font-size: 11.5px; color: var(--text-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .step-card .st-ab {
+    display: block; text-align: center;
+    background: var(--accent); color: #fff;
+    font-size: 11px; font-weight: 600; padding: 6px 0; width: 100%;
+    cursor: pointer; opacity: .92;
+  }
+  .step-card .st-ab:hover { opacity: 1; }
+  .step-add {
+    width: 170px; min-height: 96px;
+    border: 1px dashed var(--accent); border-radius: 10px; background: none;
+    color: var(--accent); font-size: 12.5px; font-weight: 600;
+    cursor: pointer; font-family: inherit;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+    transition: background .12s;
+  }
+  .step-add:hover { background: var(--accent-soft); }
+  .step-add .plus { font-size: 18px; line-height: 1; }
+
+  .editor { border: 1px solid var(--border); border-radius: 10px; background: var(--bg); overflow: hidden; }
+  .editor-subject { display: flex; align-items: center; gap: 14px; padding: 10px 14px; border-bottom: 1px solid var(--border-soft); flex-wrap: wrap; }
+  .editor-subject input {
+    flex: 1; min-width: 160px; border: none; background: none;
+    color: var(--text); font-size: 13px; font-family: inherit; outline: none;
+  }
+  .editor-link {
+    background: none; border: none; padding: 0;
+    color: var(--text-dim); font-size: 12.5px; font-weight: 500;
+    cursor: pointer; font-family: inherit; white-space: nowrap;
+  }
+  .editor-link:hover { color: var(--text); }
+  .editor-toolbar { display: flex; align-items: center; gap: 4px; padding: 7px 10px; border-bottom: 1px solid var(--border-soft); flex-wrap: wrap; }
+  .tb-btn {
+    width: 28px; height: 28px; border: none; background: none; border-radius: 6px;
+    color: var(--text-dim); font-size: 13px; cursor: pointer; font-family: inherit;
+    transition: background .12s, color .12s;
+  }
+  .tb-btn:hover { background: var(--hover); color: var(--text); }
+  .editor-body { min-height: 240px; padding: 14px 16px; font-size: 13px; outline: none; }
+  .editor-body:empty::before { content: attr(data-placeholder); color: var(--text-faint); pointer-events: none; }
+  .editor-footer { display: flex; align-items: center; gap: 18px; padding: 10px 16px; border-top: 1px solid var(--border-soft); flex-wrap: wrap; }
+  .editor-footer .words { margin-left: auto; font-size: 11.5px; color: var(--text-faint); font-variant-numeric: tabular-nums; }
+</style>
+</head>
+<body>
+<script>
+  // Apply the saved theme before first paint to avoid a flash of the wrong theme.
+  try { document.documentElement.setAttribute("data-theme", localStorage.getItem("bricks-theme") || "dark"); }
+  catch (e) { document.documentElement.setAttribute("data-theme", "dark"); }
+</script>
+<div id="root"></div>
+<script type="module">
+import React, { useState, useEffect, useRef, useCallback, useMemo } from "https://esm.sh/react@18.3.1";
+import { createRoot } from "https://esm.sh/react-dom@18.3.1/client";
+import htm from "https://esm.sh/htm@3.1.1";
+
+const html = htm.bind(React.createElement);
+
+async function api(path, options) {
+  const res = await fetch(path, options);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `${res.status} ${res.statusText}`);
+  return data;
+}
+
+function toCSV(headers, rows) {
+  const esc = (v) => {
+    const s = String(v ?? "");
+    return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  };
+  return [headers, ...rows].map(row => row.map(esc).join(",")).join("\r\n");
+}
+
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+const RE_URL = /^https?:\/\/\S+$/i;
+const RE_EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+const RE_DOMAIN = /^[a-z0-9-]+(\.[a-z0-9-]+)+$/i;
+const RE_NUM = /^-?\d+([.,]\d+)?$/;
+
+function columnType(header, values) {
+  // Status columns follow the shared vocabulary (CONVENTIONS §5) and render as chips.
+  if (header === "status" || header.endsWith("_status")) return "status";
+  const sample = values.filter(v => v !== "").slice(0, 20);
+  if (!sample.length) return "text";
+  if (sample.every(v => RE_NUM.test(v))) return "number";
+  if (sample.every(v => RE_EMAIL.test(v))) return "email";
+  if (sample.every(v => RE_URL.test(v) || RE_DOMAIN.test(v))) return "link";
+  return "text";
+}
+const TYPE_ICON = { text: "Aa", number: "#", email: "@", link: "\u{1F517}", status: "●" };
+
+function compareCell(a, b, type) {
+  const va = a ?? "";
+  const vb = b ?? "";
+  if (va === "" && vb !== "") return 1;
+  if (vb === "" && va !== "") return -1;
+  if (type === "number") {
+    const na = parseFloat(String(va).replace(",", "."));
+    const nb = parseFloat(String(vb).replace(",", "."));
+    return (isNaN(na) ? -Infinity : na) - (isNaN(nb) ? -Infinity : nb);
+  }
+  return String(va).localeCompare(String(vb), undefined, { numeric: true, sensitivity: "base" });
+}
+
+function rowMatchesFilters(row, { global, colFilters, cols }) {
+  const q = global.trim().toLowerCase();
+  if (q && !cols.some(({ i }) => String(row[i] ?? "").toLowerCase().includes(q))) return false;
+  for (const { h, i } of cols) {
+    const fq = (colFilters[h] || "").trim().toLowerCase();
+    if (fq && !String(row[i] ?? "").toLowerCase().includes(fq)) return false;
+  }
+  return true;
+}
+
+function Cell({ value, type }) {
+  if (value === "") return html`<span class="cell-empty">—</span>`;
+  if (type === "status") return html`<span class=${"chip s-" + value}>${value}</span>`;
+  if (type === "email") return html`<a class="cell-link" href=${"mailto:" + value}>${value}</a>`;
+  if (type === "link") {
+    const href = RE_URL.test(value) ? value : "https://" + value;
+    return html`<a class="cell-link" href=${href} target="_blank" rel="noreferrer">${value}</a>`;
+  }
+  if (type === "number") return html`<span class="cell-num">${value}</span>`;
+  return html`<span title=${value}>${value}</span>`;
+}
+
+const TIMEZONES = [
+  "(GMT-8:00) Pacific Time (US & Canada)",
+  "(GMT-5:00) Eastern Time (US & Canada)",
+  "(GMT+0:00) Dublin, Edinburgh, Lisbon, London",
+  "(GMT+1:00) Brussels, Copenhagen, Madrid, Paris",
+  "(GMT+1:00) Amsterdam, Berlin, Rome, Vienna",
+  "(GMT+2:00) Athens, Bucharest, Helsinki",
+  "(GMT+3:00) Moscow, St. Petersburg",
+  "(GMT+4:00) Dubai, Abu Dhabi",
+  "(GMT+5:30) Mumbai, New Delhi",
+  "(GMT+8:00) Beijing, Hong Kong, Singapore",
+  "(GMT+9:00) Tokyo, Seoul",
+  "(GMT+10:00) Sydney, Melbourne",
+];
+const HOURS = Array.from({ length: 48 }, (_, i) =>
+  `${String(Math.floor(i / 2)).padStart(2, "0")}:${i % 2 ? "30" : "00"}`);
+const DAYS = [
+  ["mon", "Lundi"], ["tue", "Mardi"], ["wed", "Mercredi"], ["thu", "Jeudi"],
+  ["fri", "Vendredi"], ["sat", "Samedi"], ["sun", "Dimanche"],
+];
+const STOP_CONDITIONS = [
+  ["replies", "Répond"], ["clicks", "Clique sur un lien"], ["opens", "Ouvre l'e-mail"],
+];
+
+function CampaignsPage({ campaigns, onNew, onInfra }) {
+  return html`
+    <div class="page"><div class="page-inner">
+      <div class="page-head">
+        <h2>Campaigns</h2>
+        <div class="spacer"></div>
+        <button class="btn-ghost" onClick=${onInfra}><span>⚙</span> Paramétrage infra</button>
+        <button class="btn-plus" title="Nouvelle campagne" onClick=${onNew}>+</button>
+      </div>
+      ${campaigns.length === 0
+        ? html`<div class="empty-campaigns">
+            <div class="big">📭</div>
+            <div>No campaign yet</div>
+          </div>`
+        : html`<div class="campaign-list">
+            ${campaigns.map((c, i) => html`<div key=${i} class="campaign-row">
+              <span class="c-name">${c.name || "Sans nom"}</span>
+              <span class="c-meta">${c.timezone}</span>
+            </div>`)}
+          </div>`}
+    </div></div>`;
+}
+
+function Section({ icon, tone, title, summary, open, onToggle, children }) {
+  return html`
+    <div class=${"acc" + (open ? " open" : "")}>
+      <div class="acc-head" onClick=${onToggle}>
+        <span class=${"acc-ico " + (tone || "orange")}>${icon}</span>
+        <span class="acc-title">${title}</span>
+        <div class="acc-summary">${summary}</div>
+        <span class="acc-chevron">▼</span>
+      </div>
+      ${open && html`<div class="acc-body">${children}</div>`}
+    </div>`;
+}
+
+const PROVIDERS = [
+  { ico: "G", color: "#4285F4", label: "Connecter un compte GSuite/Google Workspace" },
+  { ico: "G", color: "#EA4335", label: "Connecter un compte Gmail" },
+  { ico: "▦", color: "#F25022", label: "Connecter un compte Microsoft 365/Outlook" },
+  { ico: "@", color: "#f59e0b", label: "Connecter un compte SMTP/IMAP" },
+];
+
+function CampaignSettingsPage({ onBack, onSave }) {
+  const [name, setName] = useState("");
+  const [timezone, setTimezone] = useState("(GMT+1:00) Brussels, Copenhagen, Madrid, Paris");
+  const [maxNewPerDay, setMaxNewPerDay] = useState("35");
+  const [dailyLimit, setDailyLimit] = useState("100");
+  const [bcc, setBcc] = useState("");
+  const [days, setDays] = useState({ mon: true, tue: true, wed: true, thu: true, fri: true, sat: false, sun: false });
+  const [from, setFrom] = useState("08:00");
+  const [to, setTo] = useState("17:00");
+  const [stopOn, setStopOn] = useState({ replies: true, clicks: false, opens: false });
+
+  const [open, setOpen] = useState({ general: true, mail: false, contacts: false, sequence: false });
+  const toggleSection = (key) => setOpen(prev => ({ ...prev, [key]: !prev[key] }));
+
+  // Mail d'envoi — front-only: no mailbox connected yet.
+  const emails = [];
+  const [multiMail, setMultiMail] = useState(false);
+  const [selectedEmail, setSelectedEmail] = useState("");
+
+  // Liste de contacts — front-only: empty for now.
+  const contacts = [];
+  const [contactSearch, setContactSearch] = useState("");
+
+  // Séquence de mail.
+  const [steps, setSteps] = useState([{ subject: "", body: "" }]);
+  const [activeStep, setActiveStep] = useState(0);
+  const [words, setWords] = useState(0);
+  const editorRef = useRef(null);
+  const countWords = (t) => (t.trim().match(/\S+/g) || []).length;
+
+  const readEditor = () => editorRef.current ? editorRef.current.innerHTML : null;
+  const saveEditor = () => {
+    const body = readEditor();
+    if (body === null) return;
+    setSteps(prev => prev.map((s, i) => i === activeStep ? { ...s, body } : s));
+  };
+  const selectStep = (i) => { saveEditor(); setActiveStep(i); };
+  const addStep = () => {
+    saveEditor();
+    setSteps(prev => [...prev, { subject: "", body: "" }]);
+    setActiveStep(steps.length);
+  };
+  const setSubject = (v) => setSteps(prev => prev.map((s, i) => i === activeStep ? { ...s, subject: v } : s));
+
+  // Load the active step into the (uncontrolled) editor when it appears or changes.
+  useEffect(() => {
+    const el = editorRef.current;
+    if (!el) return;
+    const body = steps[activeStep].body || "";
+    if (el.innerHTML !== body) el.innerHTML = body;
+    setWords(countWords(el.innerText || ""));
+  }, [activeStep, open.sequence]);
+
+  const exec = (cmd, val) => (e) => {
+    e.preventDefault(); // keep the selection inside the editor
+    document.execCommand(cmd, false, val);
+  };
+  const addLink = (e) => {
+    e.preventDefault();
+    const url = window.prompt("URL du lien :");
+    if (url) document.execCommand("createLink", false, url);
+  };
+
+  const toggle = (setter) => (key) => setter(prev => ({ ...prev, [key]: !prev[key] }));
+  const toggleDay = toggle(setDays);
+  const toggleStop = toggle(setStopOn);
+
+  const save = () => {
+    const body = readEditor();
+    const finalSteps = body === null ? steps
+      : steps.map((s, i) => i === activeStep ? { ...s, body } : s);
+    onSave({
+      name, timezone,
+      maxNewPerDay: Number(maxNewPerDay || 0),
+      dailyLimit: Number(dailyLimit || 0),
+      bcc, days, from, to, stopOn,
+      sendingEmail: selectedEmail || null,
+      multiMail,
+      steps: finalSteps,
+    });
+  };
+
+  const step = steps[activeStep];
+
+  return html`
+    <div class="page"><div class="page-inner">
+      <div class="page-head">
+        <button class="back-btn" onClick=${onBack}>← Campaigns</button>
+        <div class="spacer"></div>
+        <button class="btn-accent" onClick=${save}>Enregistrer</button>
+      </div>
+
+      <${Section} icon="⚙" tone="orange" title="Paramètres généraux" open=${open.general} onToggle=${() => toggleSection("general")}
+        summary=${html`Fuseau horaire : ${timezone}<br />Ajout de contacts quotidien : ${maxNewPerDay || "—"}`}>
+        <div class="form-grid">
+          <div class="field full">
+            <label>Nom de la campagne</label>
+            <input type="text" value=${name} placeholder="Ma campagne" onInput=${e => setName(e.target.value)} />
+          </div>
+          <div class="field">
+            <label>Zone géographique</label>
+            <select value=${timezone} onChange=${e => setTimezone(e.target.value)}>
+              ${TIMEZONES.map(tz => html`<option key=${tz} value=${tz}>${tz}</option>`)}
+            </select>
+          </div>
+          <div class="field">
+            <label>Nombre maximal de nouvelles personnes à atteindre par jour</label>
+            <div class="input-wrap">
+              <input type="text" inputmode="numeric" value=${maxNewPerDay} onInput=${e => setMaxNewPerDay(e.target.value.replace(/\D/g, ""))} />
+              <span class="suffix">par boite mail</span>
+            </div>
+          </div>
+          <div class="field">
+            <label>Limite d'envoi journalier</label>
+            <div class="input-wrap">
+              <input type="text" inputmode="numeric" value=${dailyLimit} onInput=${e => setDailyLimit(e.target.value.replace(/\D/g, ""))} />
+              <span class="suffix">par boite mail</span>
+            </div>
+          </div>
+          <div class="field">
+            <label>BCC (facultatif)</label>
+            <input type="text" value=${bcc} placeholder="bcc@exemple.com" onInput=${e => setBcc(e.target.value)} />
+          </div>
+          <div class="field full">
+            <label>Jours d'envois</label>
+            <div class="check-row">
+              ${DAYS.map(([key, label]) => html`
+                <label key=${key} class=${"check-item" + (days[key] ? "" : " off")}>
+                  <input type="checkbox" checked=${days[key]} onChange=${() => toggleDay(key)} />${label}
+                </label>`)}
+            </div>
+          </div>
+          <div class="field full">
+            <div class="hours-row">
+              <div class="field">
+                <label>Entre</label>
+                <select value=${from} onChange=${e => setFrom(e.target.value)}>
+                  ${HOURS.map(h => html`<option key=${h} value=${h}>${h}</option>`)}
+                </select>
+              </div>
+              <div class="field">
+                <label>et</label>
+                <select value=${to} onChange=${e => setTo(e.target.value)}>
+                  ${HOURS.map(h => html`<option key=${h} value=${h}>${h}</option>`)}
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="form-section">
+          <div class="sec-title">Ne plus envoyer d'emails si l'utilisateur :</div>
+          <div class="check-row">
+            ${STOP_CONDITIONS.map(([key, label]) => html`
+              <label key=${key} class=${"check-item" + (stopOn[key] ? "" : " off")}>
+                <input type="checkbox" checked=${stopOn[key]} onChange=${() => toggleStop(key)} />${label}
+              </label>`)}
+          </div>
+        </div>
+      <//>
+
+      ${false && html`
+      <${Section} icon="📤" tone="orange" title="Mail d'envoi" open=${open.mail} onToggle=${() => toggleSection("mail")}
+        summary=${html`${emails.length} e-mail${emails.length === 1 ? "" : "s"} enregistré${emails.length === 1 ? "" : "s"}<br />E-mail sélectionné : ${selectedEmail || "(aucun)"}`}>
+        <div class="mail-center">
+          <div class="mail-toggle-row">
+            <span>Sélectionner plusieurs adresses e-mails</span>
+            <label class="switch">
+              <input type="checkbox" checked=${multiMail} onChange=${() => setMultiMail(m => !m)} />
+              <span class="track"></span>
+            </label>
+          </div>
+          <div class="mail-hint">Vous avez enregistré ${emails.length} email(s) sur vos 50 autorisés.</div>
+          <select class="mail-select" value=${selectedEmail} onChange=${e => setSelectedEmail(e.target.value)}>
+            <option value="">Selectionnez une adresse email</option>
+            ${emails.map(m => html`<option key=${m} value=${m}>${m}</option>`)}
+          </select>
+          <div class="ou-divider">OU</div>
+          <div class="connect-title">Connectez une nouvelle boite email</div>
+          <div class="provider-grid">
+            ${PROVIDERS.map(p => html`
+              <button key=${p.label} class="provider-card" title="Bientôt disponible">
+                <span class="p-ico" style=${{ color: p.color }}>${p.ico}</span>
+                <span>${p.label}</span>
+              </button>`)}
+          </div>
+        </div>
+      <//>`}
+
+      <${Section} icon="👥" tone="yellow" title="Liste de contacts" open=${open.contacts} onToggle=${() => toggleSection("contacts")}
+        summary="Ajouter vos listes et vos contacts dans cette section, ils seront contactés ensuite avec les paramètres de votre campagne">
+        <div class="contacts-bar">
+          <button class="link-action">Supprimer contact(s)</button>
+          <button class="link-action">Exporter</button>
+          <div class="search-wrap">
+            <input type="text" value=${contactSearch} onInput=${e => setContactSearch(e.target.value)} />
+            <span class="search-ico">🔍</span>
+          </div>
+          <button class="btn-ghost">Filtrer</button>
+          <span class="count-chip">👥 <span class="n">${contacts.length}</span></span>
+          <button class="btn-ghost">Ajouter des contacts</button>
+        </div>
+        <div class="contacts-empty">
+          Aucun contact, pour ajouter une liste cliquez sur "Ajouter des contacts"
+        </div>
+      <//>
+
+      <${Section} icon="✉" tone="green" title="Votre séquence de mail" open=${open.sequence} onToggle=${() => toggleSection("sequence")}
+        summary=${`${steps.length} étape${steps.length === 1 ? "" : "s"} créée${steps.length === 1 ? "" : "s"}`}>
+        <div class="steps-row">
+          ${steps.map((s, i) => html`
+            <button key=${i} class=${"step-card" + (i === activeStep ? " active" : "")} onClick=${() => selectStep(i)}>
+              <span class="st-body">
+                <span class="st-name">Etape ${i + 1}</span>
+                <span class="st-subject">${s.subject || "Insérer objet de l'étape"}</span>
+              </span>
+              <span class="st-ab">+ A/B testing</span>
+            </button>`)}
+          <button class="step-add" onClick=${addStep}>
+            <span class="plus">+</span> Ajouter une step
+          </button>
+        </div>
+        <div class="editor">
+          <div class="editor-subject">
+            <input type="text" placeholder="Ajouter un objet à votre mail ici"
+              value=${step.subject} onInput=${e => setSubject(e.target.value)} />
+            <button class="editor-link">Ajouter du Spintext</button>
+            <button class="editor-link">Ajouter une variable ⌄</button>
+            <button class="btn-ghost">Tester votre mail</button>
+            <button class="btn-ghost" disabled>Prévisualiser</button>
+          </div>
+          <div class="editor-toolbar">
+            <button class="tb-btn" title="Gras" onMouseDown=${exec("bold")}><b>B</b></button>
+            <button class="tb-btn" title="Italique" onMouseDown=${exec("italic")}><i>I</i></button>
+            <button class="tb-btn" title="Souligné" onMouseDown=${exec("underline")}><u>U</u></button>
+            <button class="tb-btn" title="Barré" onMouseDown=${exec("strikeThrough")}><s>S</s></button>
+            <button class="tb-btn" title="Liste numérotée" onMouseDown=${exec("insertOrderedList")}>1.</button>
+            <button class="tb-btn" title="Liste à puces" onMouseDown=${exec("insertUnorderedList")}>•</button>
+            <button class="tb-btn" title="Lien" onMouseDown=${addLink}>🔗</button>
+            <button class="tb-btn" title="Effacer le formatage" onMouseDown=${exec("removeFormat")}>Tx</button>
+          </div>
+          <div class="editor-body" contentEditable="true" ref=${editorRef}
+            data-placeholder="Écrivez votre email ici…"
+            onInput=${e => setWords(countWords(e.target.innerText || ""))}
+            onBlur=${saveEditor}></div>
+          <div class="editor-footer">
+            <button class="editor-link">Ajouter signature</button>
+            <button class="editor-link">Ajouter lien de désinscription</button>
+            <button class="editor-link">Sauvegarder comme template</button>
+            <button class="editor-link">Ajouter une pièce jointe</button>
+            <span class="words">${words} mot${words === 1 ? "" : "s"}</span>
+          </div>
+        </div>
+      <//>
+
+      <div class="form-actions">
+        <button class="btn-accent" onClick=${save}>Enregistrer</button>
+      </div>
+    </div></div>`;
+}
+
+function App() {
+  const [view, setView] = useState("data");            // "data" | "campaigns" | "campaign-new" | "infra"
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [campaigns, setCampaigns] = useState([]);      // front-only for now, DB later
+  const [status, setStatus] = useState(null);
+  const [active, setActive] = useState(null);          // active table name
+  const [table, setTable] = useState(null);            // {headers, rows}
+  const [selected, setSelected] = useState(new Set()); // 1-based row numbers
+  const [confirming, setConfirming] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settings, setSettings] = useState(null);       // {path, keys:[...]}
+  const [keyInputs, setKeyInputs] = useState({});        // key -> pasted value
+  const [savingKey, setSavingKey] = useState(null);
+  const [settingsError, setSettingsError] = useState(null);
+
+  const openSettings = async () => {
+    setSettingsOpen(true);
+    setSettingsError(null);
+    try { setSettings(await api("/api/settings")); }
+    catch (e) { setSettingsError(e.message); }
+  };
+  const saveKey = async (key) => {
+    const value = (keyInputs[key] || "").trim();
+    if (!value) return;
+    setSavingKey(key);
+    setSettingsError(null);
+    try {
+      await api("/api/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key, value }),
+      });
+      setKeyInputs(prev => ({ ...prev, [key]: "" }));
+      setSettings(await api("/api/settings"));
+    } catch (e) {
+      setSettingsError(e.message);
+    } finally {
+      setSavingKey(null);
+    }
+  };
+  const [exporting, setExporting] = useState(null);    // "csv" | "xlsx" while running
+  const [busy, setBusy] = useState(false);
+  const [switching, setSwitching] = useState(null);   // workspace name being switched to
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [updatedAt, setUpdatedAt] = useState(null);
+  const [theme, setTheme] = useState(() => {
+    try { return localStorage.getItem("bricks-theme") || "dark"; } catch { return "dark"; }
+  });
+  const [sort, setSort] = useState(null);              // { colIdx, dir: "asc"|"desc" } | null
+  const [globalFilter, setGlobalFilter] = useState("");
+  const [colFilters, setColFilters] = useState({});    // header -> filter text
+  const [showColFilters, setShowColFilters] = useState(false);
+  const activeRef = useRef(active);
+  activeRef.current = active;
+  const allRef = useRef(null);
+
+  const loadStatus = useCallback(async () => {
+    const st = await api("/api/status");
+    setStatus(st);
+    const tables = st.current ? st.current.tables : [];
+    if (tables.length && !tables.includes(activeRef.current)) setActive(tables[0]);
+    if (!tables.length) { setActive(null); setTable(null); }
+    return st;
+  }, []);
+
+  const loadTable = useCallback(async (name, { silent } = {}) => {
+    if (!name) return;
+    if (!silent) setLoading(true);
+    try {
+      const data = await api("/api/table/" + encodeURIComponent(name));
+      setTable(data);
+      // Prune selected ids that no longer exist (row deleted by a skill).
+      const idc = data.headers.indexOf("_id");
+      setSelected(prev => {
+        if (!prev.size) return prev;
+        const alive = new Set(idc >= 0 ? data.rows.map(r => r[idc]) : []);
+        const next = new Set([...prev].filter(id => alive.has(id)));
+        return next.size === prev.size ? prev : next;
+      });
+      setUpdatedAt(new Date());
+      setError(null);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const refresh = useCallback(async (silent = false) => {
+    try {
+      const st = await loadStatus();
+      const tables = st.current ? st.current.tables : [];
+      const name = tables.includes(activeRef.current) ? activeRef.current : tables[0];
+      if (name) await loadTable(name, { silent });
+      setError(null);
+    } catch (e) {
+      setError(e.message);
+    }
+  }, [loadStatus, loadTable]);
+
+  const switchWorkspace = useCallback(async (name) => {
+    if (switching || (status && name === status.currentWorkspace)) return;
+    setSwitching(name);
+    setError(null);
+    try {
+      await api("/api/workspace/switch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
+      // The new workspace has its own tables — reset the table view fully.
+      setActive(null);
+      setTable(null);
+      setSelected(new Set());
+      setConfirming(false);
+      await refresh();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setSwitching(null);
+    }
+  }, [switching, status, refresh]);
+
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", theme);
+    try { localStorage.setItem("bricks-theme", theme); } catch {}
+  }, [theme]);
+
+  useEffect(() => { refresh(); }, []);
+  useEffect(() => {
+    if (!active) return;
+    setSelected(new Set());
+    setConfirming(false);
+    setSort(null);
+    setGlobalFilter("");
+    setColFilters({});
+    setShowColFilters(false);
+    loadTable(active).catch(e => setError(e.message));
+  }, [active]);
+
+  // Light polling — selection is keyed by _id, so refreshing while rows are
+  // selected is safe (stale ids are pruned on load, numbers may shift, ids don't).
+  useEffect(() => {
+    const id = setInterval(() => {
+      if (!document.hidden) refresh(true);
+    }, 4000);
+    return () => clearInterval(id);
+  }, [refresh]);
+
+  const rows = table ? table.rows : [];
+  const allHeaders = table ? table.headers : [];
+  const idIdx = allHeaders.indexOf("_id");
+  const canSelect = idIdx >= 0;
+  // Technical columns (underscore-prefixed, e.g. _id) are never displayed.
+  const cols = allHeaders.map((h, i) => ({ h, i })).filter(({ h }) => !h.startsWith("_"));
+  const types = cols.map(({ h, i }) => columnType(h, rows.map(r => r[i] ?? "")));
+
+  const hasFilters = globalFilter.trim() !== "" || Object.values(colFilters).some(v => v.trim());
+  const displayRows = useMemo(() => {
+    let result = rows.filter(r => rowMatchesFilters(r, { global: globalFilter, colFilters, cols }));
+    if (sort) {
+      const { colIdx, dir } = sort;
+      const colIndex = cols[colIdx].i;
+      const type = types[colIdx];
+      result = [...result].sort((a, b) => {
+        const cmp = compareCell(a[colIndex], b[colIndex], type);
+        return dir === "desc" ? -cmp : cmp;
+      });
+    }
+    return result;
+  }, [rows, globalFilter, colFilters, cols, sort, types]);
+
+  const toggleSort = (colIdx) => {
+    setSort(prev => {
+      if (!prev || prev.colIdx !== colIdx) return { colIdx, dir: "asc" };
+      if (prev.dir === "asc") return { colIdx, dir: "desc" };
+      return null;
+    });
+  };
+  const setColFilter = (header, value) => {
+    setColFilters(prev => {
+      const next = { ...prev, [header]: value };
+      if (!value.trim()) delete next[header];
+      return next;
+    });
+  };
+  const clearFilters = () => {
+    setGlobalFilter("");
+    setColFilters({});
+    setShowColFilters(false);
+  };
+
+  const allChecked = canSelect && displayRows.length > 0
+    && displayRows.every(r => selected.has(r[idIdx]));
+  const someChecked = canSelect && displayRows.some(r => selected.has(r[idIdx]));
+  useEffect(() => {
+    if (allRef.current) allRef.current.indeterminate = someChecked && !allChecked;
+  }, [selected, allChecked, someChecked]);
+
+  const toggleRow = (id) => {
+    const next = new Set(selected);
+    next.has(id) ? next.delete(id) : next.add(id);
+    setSelected(next);
+    setConfirming(false);
+  };
+  const toggleAll = () => {
+    if (allChecked) {
+      const visible = new Set(displayRows.map(r => r[idIdx]));
+      setSelected(prev => new Set([...prev].filter(id => !visible.has(id))));
+    } else {
+      setSelected(prev => new Set([...prev, ...displayRows.map(r => r[idIdx])]));
+    }
+    setConfirming(false);
+  };
+
+  const doDelete = async () => {
+    if (!confirming) { setConfirming(true); return; }
+    setBusy(true);
+    try {
+      await api("/api/table/" + encodeURIComponent(active) + "/remove", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: [...selected] }),
+      });
+      setSelected(new Set());
+      setConfirming(false);
+      await refresh(true);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const doExport = async (format) => {
+    if (!table || exporting) return;
+    const headers = cols.map(({ h }) => h);
+    const dataRows = displayRows.map(r => cols.map(({ i }) => r[i] ?? ""));
+    const base = (active || "export").replace(/\.csv$/, "");
+    setExporting(format);
+    try {
+      if (format === "csv") {
+        const csv = "\uFEFF" + toCSV(headers, dataRows); // BOM: Excel reads UTF-8
+        downloadBlob(new Blob([csv], { type: "text/csv;charset=utf-8" }), base + ".csv");
+      } else {
+        const XLSX = await import("https://esm.sh/xlsx@0.18.5");
+        const sheet = XLSX.utils.aoa_to_sheet([headers, ...dataRows]);
+        const wb = XLSX.utils.book_new();
+        const sheetName = (base.replace(/[\\/?*\[\]:]/g, "").slice(0, 31)) || "Sheet1";
+        XLSX.utils.book_append_sheet(wb, sheet, sheetName);
+        XLSX.writeFile(wb, base + ".xlsx");
+      }
+      setExportOpen(false);
+    } catch (e) {
+      setError("Export failed: " + e.message);
+    } finally {
+      setExporting(null);
+    }
+  };
+
+  const current = status && status.current;
+  const tables = current ? current.tables : [];
+
+  let body;
+  if (status && !status.initialized) {
+    body = html`<div class="state">
+      <div class="big">\u{1F9F1}</div>
+      <div class="title">Bricks is not initialized here</div>
+      <div>Run <code>/bricks:workspace new <name></code> in Claude Code, then refresh.</div>
+    </div>`;
+  } else if (status && !status.currentWorkspace) {
+    body = html`<div class="state">
+      <div class="big">\u{1F4C2}</div>
+      <div class="title">No current workspace</div>
+      <div>Create one with <code>/bricks:workspace new <name></code>.</div>
+    </div>`;
+  } else if (status && tables.length === 0) {
+    body = html`<div class="state">
+      <div class="big">\u{1FA9F}</div>
+      <div class="title">No tables yet in ${status.currentWorkspace}</div>
+      <div>Run <code>/bricks:find</code> to build your first list.</div>
+    </div>`;
+  } else if (table) {
+    body = html`
+      <div class="table-zone">
+        <div class="card">
+          <div class="table-toolbar">
+            <div class="search-wrap">
+              <input type="text" value=${globalFilter} placeholder="Rechercher dans toutes les colonnes…"
+                onInput=${e => setGlobalFilter(e.target.value)} />
+              <span class="search-ico">🔍</span>
+            </div>
+            <button
+              class=${"btn-toolbar" + (showColFilters ? " active" : "")}
+              title="Afficher un filtre par colonne"
+              onClick=${() => setShowColFilters(v => !v)}>
+              Filtres colonnes
+            </button>
+            ${(hasFilters || sort) && html`
+              <button class="btn-toolbar" title="Réinitialiser tri et filtres" onClick=${() => { clearFilters(); setSort(null); }}>
+                Effacer
+              </button>`}
+            ${(hasFilters || sort) && html`
+              <span class="toolbar-meta">${displayRows.length} / ${rows.length} lignes</span>`}
+          </div>
+          <div class="grid-scroll">
+            <table>
+              <thead class=${showColFilters ? "has-filters" : ""}>
+                <tr>
+                  ${canSelect && html`<th class="col-check"><input type="checkbox" ref=${allRef} checked=${allChecked} onChange=${toggleAll} /></th>`}
+                  <th class="col-num"></th>
+                  ${cols.map(({ h }, k) => {
+                    const sorted = sort && sort.colIdx === k;
+                    return html`<th key=${h}
+                      class=${"sortable" + (sorted ? " sorted sorted-" + sort.dir : "")}
+                      title=${sorted ? (sort.dir === "asc" ? "Tri croissant — clic pour décroissant" : "Tri décroissant — clic pour effacer") : "Cliquer pour trier"}
+                      onClick=${() => toggleSort(k)}>
+                      <span class="th-inner">
+                        <span class="type-ico">${TYPE_ICON[types[k]]}</span>
+                        <span>${h}</span>
+                        <span class="sort-ico">${sorted ? (sort.dir === "asc" ? "↑" : "↓") : "↕"}</span>
+                      </span>
+                    </th>`;
+                  })}
+                </tr>
+                ${showColFilters && html`<tr class="filter-row">
+                  ${canSelect && html`<th class="col-check"></th>`}
+                  <th class="col-num"></th>
+                  ${cols.map(({ h }) => html`<th key=${h}>
+                    <input class="col-filter" type="text" value=${colFilters[h] || ""} placeholder="Filtrer…"
+                      onInput=${e => setColFilter(h, e.target.value)} onClick=${e => e.stopPropagation()} />
+                  </th>`)}
+                </tr>`}
+              </thead>
+              <tbody>
+                ${displayRows.length === 0
+                  ? html`<tr><td colspan=${(canSelect ? 2 : 1) + cols.length} style=${{ textAlign: "center", color: "var(--text-faint)", padding: "32px 14px" }}>
+                      Aucune ligne ne correspond aux filtres
+                    </td></tr>`
+                  : displayRows.map((r, i) => {
+                      const rowId = canSelect ? r[idIdx] : null;
+                      const isSel = rowId !== null && selected.has(rowId);
+                      return html`<tr key=${rowId ?? i} class=${isSel ? "selected" : ""}>
+                        ${canSelect && html`<td class="col-check"><input type="checkbox" checked=${isSel} onChange=${() => toggleRow(rowId)} /></td>`}
+                        <td class="col-num">${i + 1}</td>
+                        ${cols.map(({ i: c }, k) => html`<td key=${k}><${Cell} value=${r[c] ?? ""} type=${types[k]} /></td>`)}
+                      </tr>`;
+                    })}
+              </tbody>
+            </table>
+          </div>
+          <div class="card-footer">
+            <span>${displayRows.length}${hasFilters ? ` / ${rows.length}` : ""} row${displayRows.length === 1 ? "" : "s"}</span><span>·</span>
+            <span>${cols.length} column${cols.length === 1 ? "" : "s"}</span>
+            ${sort && html`<span>·</span><span>tri : ${cols[sort.colIdx].h} ${sort.dir === "asc" ? "↑" : "↓"}</span>`}
+            ${updatedAt && html`<span>·</span><span>updated ${updatedAt.toLocaleTimeString()}</span>`}
+          </div>
+        </div>
+      </div>`;
+  } else {
+    body = html`<div class="state"><div class="title">Loading…</div></div>`;
+  }
+
+  const dataView = html`
+    ${tables.length > 0 && html`
+      <div class="tabs">
+        ${tables.map(t => html`
+          <button key=${t} class=${"tab" + (t === active ? " active" : "")} onClick=${() => setActive(t)}>
+            ${t.replace(/\.csv$/, "")}
+            ${t === active && table && html`<span class="count">${table.rows.length}</span>`}
+          </button>`)}
+      </div>`}
+    ${body}
+    ${selected.size > 0 && html`
+      <div class="action-bar">
+        <span class="sel-count">${selected.size} row${selected.size === 1 ? "" : "s"} selected</span>
+        <button class="link-btn" onClick=${() => { setSelected(new Set()); setConfirming(false); }}>Clear</button>
+        <button class="btn-danger" disabled=${busy} onClick=${doDelete}>
+          ${busy ? "Deleting…" : confirming ? `Confirm delete (${selected.size})` : "Delete"}
+        </button>
+      </div>`}`;
+
+  // Campaigns désactivé momentanément — on affiche toujours la vue data.
+  let content = dataView;
+  /*
+  if (view === "data") {
+    content = dataView;
+  } else if (view === "campaigns") {
+    content = html`<${CampaignsPage}
+      campaigns=${campaigns}
+      onNew=${() => setView("campaign-new")}
+      onInfra=${() => setView("infra")} />`;
+  } else if (view === "campaign-new") {
+    content = html`<${CampaignSettingsPage}
+      onBack=${() => setView("campaigns")}
+      onSave=${(c) => { setCampaigns(prev => [...prev, c]); setView("campaigns"); }} />`;
+  } else if (view === "infra") {
+    content = html`
+      <div class="page"><div class="page-inner">
+        <div class="page-head">
+          <button class="back-btn" onClick=${() => setView("campaigns")}>← Campaigns</button>
+        </div>
+        <div class="empty-campaigns">
+          <div class="big">🛠</div>
+          <div>Paramétrage infra — à venir</div>
+        </div>
+      </div></div>`;
+  }
+  */
+
+  return html`
+    <div class="app">
+      <div class="topbar">
+        ${/* Sidebar désactivée momentanément.
+        html`<button class="icon-btn" title=${sidebarOpen ? "Fermer le menu" : "Ouvrir le menu"} onClick=${() => setSidebarOpen(o => !o)}>☰</button>` */ null}
+        <div class="brand"><span class="logo">■</span> Bricks</div>
+        ${status && status.initialized && status.workspaces && status.workspaces.length > 0 && html`
+          <div class="sep"></div>
+          <div class="ws-bar">
+            ${status.workspaces.map(w => {
+              const isCurrent = w === status.currentWorkspace;
+              const isSwitching = switching === w;
+              return html`<button key=${w}
+                class=${"ws-tab" + (isCurrent ? " active" : "") + (isSwitching ? " switching" : "")}
+                disabled=${switching !== null || isCurrent}
+                title=${isCurrent ? "Workspace actuel" : "Basculer sur « " + w + " »"}
+                onClick=${() => switchWorkspace(w)}>
+                <span class="dot"></span>${w}
+              </button>`;
+            })}
+          </div>
+        `}
+        <div class="spacer"></div>
+        ${updatedAt && html`<span class="meta">synced ${updatedAt.toLocaleTimeString()}</span>`}
+        ${view === "data" && table && rows.length > 0 && html`
+          <button class="btn-export" title="Exporter la table" onClick=${() => setExportOpen(true)}>
+            <span>⭳</span> Exporter
+          </button>`}
+        <button class="icon-btn" title="Clés API du moteur" onClick=${openSettings}>⚙</button>
+        <button class="icon-btn" title=${theme === "dark" ? "Passer en mode clair" : "Passer en mode sombre"} onClick=${() => setTheme(t => t === "dark" ? "light" : "dark")}>${theme === "dark" ? "☀" : "☾"}</button>
+        <button class=${"icon-btn" + (loading ? " spinning" : "")} title="Refresh" onClick=${() => refresh()}>↻</button>
+      </div>
+      ${error && html`<div class="error-banner">${error}</div>`}
+      <div class="main">
+        ${/* Sidebar désactivée momentanément.
+        html`<nav class=${"sidebar" + (sidebarOpen ? "" : " closed")}>
+          <button class=${"nav-item" + (view === "data" ? " active" : "")} onClick=${() => setView("data")}>
+            <span class="nav-ico">▦</span> Data
+          </button>
+          <button class=${"nav-item" + (view !== "data" ? " active" : "")} onClick=${() => setView("campaigns")}>
+            <span class="nav-ico">✉</span> Campaigns
+          </button>
+        </nav>` */ null}
+        <div class="content">
+          ${content}
+        </div>
+      </div>
+      ${exportOpen && html`
+        <div class="modal-overlay" onClick=${() => !exporting && setExportOpen(false)}>
+          <div class="modal" onClick=${e => e.stopPropagation()}>
+            <div class="modal-head">
+              <h3>Exporter ${(active || "").replace(/\.csv$/, "")}</h3>
+              <button class="icon-btn" title="Fermer" disabled=${!!exporting} onClick=${() => setExportOpen(false)}>✕</button>
+            </div>
+            <p class="modal-sub">${displayRows.length}${hasFilters ? ` / ${rows.length}` : ""} ligne${displayRows.length === 1 ? "" : "s"} · ${cols.length} colonne${cols.length === 1 ? "" : "s"}. Choisis un format.</p>
+            <div class="export-opts">
+              <button class="export-opt" disabled=${!!exporting} onClick=${() => doExport("csv")}>
+                <span class="fmt">${exporting === "csv" ? "Export…" : "CSV"}</span>
+                <span class="fmt-desc">Texte brut, compatible tous tableurs</span>
+              </button>
+              <button class="export-opt" disabled=${!!exporting} onClick=${() => doExport("xlsx")}>
+                <span class="fmt">${exporting === "xlsx" ? "Export…" : "XLSX"}</span>
+                <span class="fmt-desc">Classeur Excel natif</span>
+              </button>
+            </div>
+          </div>
+        </div>`}
+      ${settingsOpen && html`
+        <div class="modal-overlay" onClick=${() => !savingKey && setSettingsOpen(false)}>
+          <div class="modal modal-settings" onClick=${e => e.stopPropagation()}>
+            <div class="modal-head">
+              <h3>⚙ Clés API du moteur</h3>
+              <button class="icon-btn" title="Fermer" disabled=${!!savingKey} onClick=${() => setSettingsOpen(false)}>✕</button>
+            </div>
+            <p class="modal-sub">
+              Stockées dans <code>${settings ? settings.path : "~/.bricks/env"}</code> (chmod 600, hors de tout repo).
+              Colle une clé puis Enregistrer — la valeur n'est jamais réaffichée, seulement ses 4 derniers caractères.
+            </p>
+            ${settingsError && html`<div class="settings-error">${settingsError}</div>`}
+            ${!settings && !settingsError && html`<div class="modal-sub">Chargement…</div>`}
+            ${settings && settings.keys.map(k => html`
+              <div class="key-row" key=${k.key}>
+                <div class="key-info">
+                  <span class=${"key-dot " + (k.set ? "ok" : "missing")}></span>
+                  <div class="key-text">
+                    <div class="key-label">${k.label}</div>
+                    <div class="key-hint">
+                      <code>${k.key}</code>
+                      ${k.set ? html` · configurée <code>${k.masked}</code>` : html` · manquante — ${k.hint}`}
+                    </div>
+                  </div>
+                </div>
+                <div class="key-edit">
+                  <input type="password" autocomplete="off" placeholder=${k.set ? "Remplacer…" : "Coller la clé…"}
+                    value=${keyInputs[k.key] || ""}
+                    onInput=${e => setKeyInputs(prev => ({ ...prev, [k.key]: e.target.value }))}
+                    onKeyDown=${e => { if (e.key === "Enter") saveKey(k.key); }} />
+                  <button class="btn-toolbar" disabled=${savingKey === k.key || !(keyInputs[k.key] || "").trim()}
+                    onClick=${() => saveKey(k.key)}>
+                    ${savingKey === k.key ? "…" : "Enregistrer"}
+                  </button>
+                </div>
+              </div>`)}
+          </div>
+        </div>`}
+    </div>`;
+}
+
+createRoot(document.getElementById("root")).render(html`<${App} />`);
+</script>
+</body>
+</html>

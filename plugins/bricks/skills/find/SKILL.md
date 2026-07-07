@@ -29,11 +29,11 @@ gate). The gates below are the find-specific application of it.
    default to what `icp.md` says. Default is for company but people if explicitly mentionned. 
 2. **Source**, in this order:
    - **FullEnrich MCP** (`mcp__fullenrich__*` tools) for firmographic segments:
-     `search_companies` as a preview (10 results + total), confirm the volume
+     `search_companies` as a preview (10 results + total), always print the preview and format it to the user as a table with all the information from the MCP. Also print the the request term in a human comprehensible natural language. Confirm the volume and the preview before the next part.
      with the user, then `export_companies` → download the CSV → import:
      `python3 "${CLAUDE_PLUGIN_ROOT}/tools/core/db.py" import-csv companies <file.csv> --key domain`
      If the MCP tools are missing, say it once (`/mcp` → fullenrich) and fall back.
-   - todo : Alternative methode in skills (write the skills) 
+   - todo : Alternative methode in skills (write the skills)
 3. **Write** — save the sourced rows to a temp CSV, then import with the file
    as a positional argument (never raw SQL, never fabricated data, never mass
    JSON in the conversation):
