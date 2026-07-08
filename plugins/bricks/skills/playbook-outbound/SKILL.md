@@ -45,6 +45,15 @@ signal-person job-change + hiring on the survivors (script lanes,
 0 credit) — fresh icebreakers for the writing. Paid passes stay out
 of this playbook unless the GO budgeted them.
 
+## Phase 3b — rank (if installed)
+
+Dispatch rank-accounts: fuse `tier` + the fresh signals into
+`priority_score` / `priority_tier` (now/week/nurture) + a `why_now` per
+account (deterministic, free, instant). This orders the call-list and
+feeds the writing: plan-outreach reads `priority_tier` for per-priority
+treatment, write-outreach reads `why_now` as the opener. Not installed →
+skipped and said; no signals yet → fit-only ranking (honest, no error).
+
 ## Phase 4 — strategy
 
 Dispatch plan-outreach. Its recommendation was pre-framed by the

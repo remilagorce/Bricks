@@ -95,7 +95,7 @@ next week automatically joins existing motions.
 ### Field-test log — the loop that improves the product
 
 Every fix below came from a real desktop test session. Plugin version at
-head: **0.20.2**.
+head: **0.21.2**.
 
 | Version | Trigger | What changed |
 |---|---|---|
@@ -135,6 +135,9 @@ head: **0.20.2**.
 | 0.18.0 | perf study on gtmia-agent (Robin: web runs slow vs Clay) — A/B on engine concurrency (see the worker-lanes subsection below) | `--workers` cap 10→20 (default 12); agent rows default to `--model haiku` (was the CLI's heavy default) — the two cheapest speed/cost levers, matching Anthropic's effective-agents + multi-agent-research guidance |
 | 0.19.0 | A/B RUN A vs B: 50 `claude -p` workers COLLAPSE (0 done — a heavy CLI per row oversubscribes the local Mac's CPU) while 12 hold (369s / 42-of-50 answered); per-row ≈88s so the cold-start is noise next to the web navigation | `--workers` cap → 50; NEW `tools/worker_api.py` — a lightweight Anthropic-API worker (no CLI cold-start, haiku, web via the API's server-side MCP connector, opt-in through `BRICKS_WORKER_CMD`); `researcher.py` exports the run context (model / tools / max-pages) to any override so a custom worker can drive the web lane too |
 | 0.20.0 | A/B RUN C: `worker_api` HOLDS at 30 workers (133s, ~2.8× faster) where `claude -p` died at 50 — but it bills API credits and hit the account usage cap after 4 web runs; the escalation-ladder test LOST on `claude -p` (a low first timeout sits under the cold-start, and an internal double-retry doubles each timed-out row's cost) | `--no-retry-timeout` (fail a timed-out row on the first try so an escalation ladder pays 1× not 2×; default keeps the retry — backward-compatible, verified 2→1 attempts) + CONVENTIONS §11 worker-per-lane doctrine + the old wrong "workers are I/O-bound, ceiling = rate limit" line corrected (`claude -p` is local-CPU-bound) |
+| 0.21.2 | suite scénario 2 — les deux findings restants | **#2** `rank.py` : `why_now` construit UNIQUEMENT depuis un signal frais (mult > context) — un compte au signal `context`/non-daté (ex. page carrière active) a désormais un `why_now` VIDE au lieu du « Recrute en ce moment » mensonger ; le score garde la contribution faible du context, write-outreach retombe sur le pain point (testé : Beelix context→vide, Trait'Tendance frais→gardé). **#3** wall-time : `elapsed_s` ajouté aux receipts JSON de `rank.py`/`jobs.py`/`news.py` (`firmo.py` streame, laissé) + doctrine CONVENTIONS §8 « les receipts reportent le temps de chaque génération » (demande field-test de Robin). **#4** `find-hiring-signal` : receipt Phase 4 renforcé (STATE le next step, jamais une question — dérive constatée : le run a fini par « tu veux que je lance l'enrichissement ? » malgré le contrat) + relaie `elapsed_s` |
+| 0.21.1 | scénario 2 « hiring signals » run réel — le flux a tenu (find-hiring-signal + signal-person + rank-accounts, 0 crédit, l'agent a refusé d'inventer des « now »), MAIS un bug silencieux : `find-hiring-signal` committait ses `signals` SANS `company_id` (juste `company_name`) → `rank-accounts` a joint sur `company_id` et a orphelinisé les 7 comptes au signal frais le plus fort (ressortis no-signal, score 10) ; rattrapé à la main par backfill | **Root cause** : `find-hiring-signal` Phase 4 insère les companies, relit leurs `_id`, puis écrit `company_id` (+ `company_name`) sur chaque signals row (aligné sur signal-person). **Filet défensif** : `rank.py` joint par `company_id`, fallback nom non-ambigu si vide, et **le signale** (`linkedByName`/`orphanedSignals` dans le receipt + le SKILL le remonte) au lieu de dropper en silence — testé (signal orphelin récupéré par nom). Restent ouverts (non patchés ce tour) : #2 `why_now` surévalue les signaux `context`, #3 pas de wall-time dans les receipts |
+| 0.21.0 | préparation scénario 2 « hiring signals » — la sonde `priority_score`/`why_now` n'avait pas de brique : c'est `rank-accounts` (roadmap §« To build » #2), jamais construite. Décision produit avec Robin : un vrai outil Python figé (pas de code généré à la volée), une boucle for déterministe, et le `why_now` doit être une ENTRÉE de write-outreach (sinon la colonne ne sert à rien) | **NEW brick rank-accounts** : `scripts/rank.py` (Mode A, une passe déterministe — agrège les `signals`, fusionne fit `tier` × signal frais le plus fort × fraîcheur + bonus volume → `priority_score`/100 + `priority_tier` now/week/nurture + `why_now` template, distress→cap ; poids dans `rank_spec.json`, les « trous », le modèle n'écrit aucun code) → commit `priority_*`/`why_now`/`ranked_at` en un `db.py modify` · write-outreach lit `why_now` en accroche prioritaire (généralise `hiring_angle`, fallback pain point si vide) · slot phase 3b dans playbook-outbound · bench fixture vert (fit+signal→now, no-signal→week why_now vide, signal périmé→nurture, détresse→cap 15 ; commit db.py OK) |
 | 0.20.2 | scénario 1 « base propre + ICP + no-signal control » (workspace notes-de-frais-daf) — le flux a tenu (drift guardrail impeccable, sourcing gratuit, score auto-débusqué) mais 4 écarts : (a) le 1er `db.py add` a planté car `--db` placé APRÈS la sous-commande (argparse global-only), auto-corrigé ; (b) une mesure `score` jugée sur la seule étiquette secteur → jugements creux et incohérents (data/BI noté 10 vs 5) ; (c) comité d'achat à 3 personas montré mais un seul fichier persona persisté ; (d) récaps `find`/`score` finissant par une question (doctrine = statements) | `db.py` accepte `--db`/`--root` AVANT ou APRÈS la sous-commande (parents=[dbflags], defaults SUPPRESS ; testé les deux positions) + CONVENTIONS §5 le documente · `score` doctrine « juger sur un vrai signal, jamais une étiquette » (sinon `conditional` déterministe, ou enrichir la colonne descriptive puis re-scorer gratuit) · `score` récap se termine par un statement (§8) · `context-write` persiste un fichier persona par rôle du comité + `gtm-onboard` Phase 3 lui transmet tout le comité |
 | 0.20.1 | ladder verification on BOTH workers — predicted to WIN on `worker_api`, it LOST (283s / 28 done — the worst worker_api run) and also lost on `claude -p` (473s / 41 done: beat the 720s broken ladder but still under single-shot RUN A's 369s). Root cause: with no cold-start there's no fixed per-row cost to amortise, so rungs only STACK timeouts on slow rows. The one useful piece — oversized page → `sonnet` recovery — fired for real (1 `haiku`-overflow row recovered in 16s) | CONVENTIONS §11 CORRECTED: escalation ladder DROPPED (loses on both workers); doctrine re-anchored on a calibrated SINGLE SHOT + one `too_long`→`sonnet` recovery pass; worker choice reframed as speed-vs-cost (`worker_api` faster everywhere but metered API credits + cap; `claude -p` slower but free/uncapped). Process lesson: don't enshrine a technique before a field test confirms it — the 0.20.0 ladder was premature, fixed here |
 
@@ -250,12 +253,14 @@ Sillage"). Format: IN → does → OUT · [mode].
    account, driven by `runner.py --action fetch`. → OUT: `signals` rows
    `kind='intent'` (+ `intent_score`, evidence). · [A/C]
 
-2. **rank-accounts** — the pitch's brain ("the agent tells you WHO to
-   call first and WHY"). · IN: every signal column (hiring + Sillage
-   intent + news + job-change). → a `score` preset that fuses them into
-   a `/100` + a one-line `why_now` (who + angle). → OUT: `priority_score`,
-   `why_now`, a sorted call-list. Mostly a scoring spec — little code,
-   big demo effect. · [A kernel + C judges]
+2. ~~**rank-accounts**~~ — DONE (0.21.0). The pitch's brain ("the agent
+   tells you WHO to call first and WHY"). Shipped as a FROZEN deterministic
+   script (`scripts/rank.py`, one for-loop, zero model — not a `score`
+   preset in the end: no fuzzy measure to judge, so a self-contained
+   kernel is simpler and faster) fusing `tier` + every fresh `signals`
+   row into `priority_score`/100 + `priority_tier` (now/week/nurture) +
+   a `why_now` template; weights in `rank_spec.json` (the holes).
+   `why_now` is now an INPUT of write-outreach. · [A]
 
 3. **warm-intro** — the unique differentiator (no other team will have
    it). · IN: target `contacts` + the user's own LinkedIn export / team
@@ -306,7 +311,7 @@ hence his. Demo-only slice: generate A/B variants + the rationale.
 
 _Shipped since this list was written: gtm-onboard (guided interview),
 score (kill gate + tiers), web-researcher + THE ENGINE,
-find-company-people engine lane._
+find-company-people engine lane, rank-accounts (priority_score + why_now)._
 
 ### Thomas (10%)
 
@@ -383,7 +388,7 @@ so a column fills in the UI as its wave commits.
 
 ---
 
-## 5. The complete brick catalog (23 skills)
+## 5. The complete brick catalog (24 skills)
 
 Every capability is one `skills/<name>/SKILL.md`; its precise contract lives
 in that skill's `BRICK.md`. Format below: **IN → what it does → OUT · [mode]**.
@@ -495,6 +500,15 @@ headless agents (checkpointed, never re-judged); `score.py` computes the
 total purely. File-based — never touches the DB until a separate commit
 step. → OUT: `score`, `tier`, `sc_*` decomposition, `killed` + reason. · [A
 kernel + C judges]
+
+**rank-accounts** · IN: `companies` (`tier`) + `signals` (hiring, news,
+job-change, intent). → A frozen deterministic script (`scripts/rank.py`,
+one for-loop, zero model): aggregates each account's signals, fuses fit ×
+strongest-fresh-signal × freshness + volume bonus into `priority_score`,
+assembles a `why_now` one-liner; weights in `rank_spec.json`. Commits via
+`db.py`. → OUT: `priority_score`, `priority_tier` (now/week/nurture),
+`why_now`, `why_now_url` — the sorted call-list; `why_now` feeds
+write-outreach. · [A]
 
 ### Answer (no DB write)
 

@@ -1,0 +1,53 @@
+{
+  "_comment": "The tunable weights of rank-accounts — edit values, never the logic (that lives in rank.py). 'mets hiring à 40' = change one number here.",
+
+  "fit": {
+    "tier_col": "tier",
+    "tier_points": {"A": 40, "B": 25, "C": 10},
+    "default_points": 10
+  },
+
+  "signal_kind_points": {
+    "hiring": 30,
+    "intent": 30,
+    "job_change": 20,
+    "company_news": 15,
+    "new_post": 10
+  },
+
+  "recency_multiplier": [[7, 1.0], [30, 0.8], [60, 0.6]],
+  "context_multiplier": 0.2,
+  "freshness_label_multiplier": {"fresh": 0.8, "context": 0.2},
+
+  "volume_bonus": {"min_fresh_kinds": 2, "points": 10},
+  "warning": {"field": "warning", "cap_score": 15},
+
+  "tiers": {"now": 70, "week": 40, "default": "nurture"},
+
+  "kind_labels": {
+    "hiring": "Recrute en ce moment",
+    "intent": "Signal d'intention",
+    "job_change": "Changement de poste récent",
+    "company_news": "Actu entreprise",
+    "new_post": "Publication LinkedIn récente"
+  },
+
+  "columns": {
+    "company_id": "_id",
+    "name": "name",
+    "priority_score": "priority_score",
+    "priority_tier": "priority_tier",
+    "why_now": "why_now",
+    "why_now_url": "why_now_url"
+  },
+
+  "signals": {
+    "company_id": "company_id",
+    "company_name": "company_name",
+    "kind": "kind",
+    "freshness": "freshness",
+    "date": "date",
+    "summary": "summary",
+    "evidence_url": "evidence_url"
+  }
+}

@@ -266,6 +266,12 @@ go out at once** — that, and only that, gets ONE question.
    starts, and the receipt shows the actual spend plus the session's
    cumulative total. Transparency after, not permission before. No
    per-run or per-week accounting, no envelope bookkeeping.
+   **Receipts also report WALL-TIME.** The deterministic tools expose
+   `elapsed_s` in their JSON receipt (`jobs.py`, `news.py`, `rank.py`;
+   `firmo.py` streams per row) and the engine reports its run wall-time
+   — relay it so the user sees the time each generation took, not only
+   the credits (field-tested ask: "on n'a pas le temps passé à chaque
+   génération").
 3. **The big-spend threshold**: default **50 credits for one
    batch/action**. The user changes it by just saying so ("seuil à
    100") — persisted as `spend_threshold` in `memory/state.json`.

@@ -62,7 +62,7 @@ DEFAULT_TERMS = ["levée", "levee de fonds", "acquisition", "rachat",
 WARN_TERMS = ["redressement judiciaire", "liquidation", "procédure collective",
               "dépôt de bilan", "plan social", "fermeture"]
 
-state = {"fetches": 0, "errors": []}
+state = {"fetches": 0, "errors": [], "t0": None}
 _state_lock = threading.Lock()
 
 
@@ -223,12 +223,15 @@ def run(args):
         "spend_credits": 0, "fetches": state["fetches"],
         "errors": state["errors"][:20],
     }
+    if state.get("t0") is not None:
+        summary["elapsed_s"] = round(time.perf_counter() - state["t0"], 1)
     with open(out / "summary.json", "w", encoding="utf-8") as f:
         json.dump(summary, f, ensure_ascii=False, indent=2)
     print(json.dumps(summary, ensure_ascii=False))
 
 
 def main():
+    state["t0"] = time.perf_counter()
     p = argparse.ArgumentParser(description="Company-news engine (Google News RSS)")
     p.add_argument("--companies", required=True)
     p.add_argument("--out", required=True)

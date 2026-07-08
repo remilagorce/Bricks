@@ -140,9 +140,17 @@ Via `db.py` (§5, pass `--db <absolute path>`): `companies` rows — `name`,
 domain-less rows are name-checked like find-directory-scrape),
 `source='hiring-signal'`, `status='new'`, `hiring_score`,
 `hiring_angle` — dedup on domain, existing rows enriched with the
-signal instead of duplicated. Plus ONE `signals` row per company:
-`kind='hiring'`, `date` = freshest offer, `freshness` (≤ 60 days =
-`fresh`), summary = roles + pains + volume, `evidence_url`, `sig_key`
+signal instead of duplicated. **Insert the companies FIRST, then read
+their `_id` back** (`db.py select companies --cols _id,domain,name` on
+the rows you just wrote) — because the signals rows MUST carry the
+company's `_id`. Plus ONE `signals` row per company: **`company_id`**
+(the `_id` just read back — never omit it: a signals row without
+`company_id` is an orphan that downstream joins silently drop,
+field-tested — it broke rank-accounts' fit×signal fusion) +
+**`company_name`** (denormalized, for the human table view, same as
+signal-person), `kind='hiring'`, `date` = freshest offer, `freshness`
+(≤ 60 days = `fresh`), summary = roles + pains + volume,
+`evidence_url`, `sig_key`
 = `hiring:<company_id or name>:<normalized evidence_url>` with
 `--key sig_key` — URL normalized (scheme and `www.` stripped, no
 trailing slash), the SAME convention as signal-person: both hiring
@@ -159,9 +167,14 @@ autour de HubSpot et du lead routing…", NOT "j'ai vu que vous
 recrutez". write-outreach picks it up as-is.
 
 Receipt: "X companies committed (score ≥ 70), Y parked in staging
-(50-69), Z rejected (top reasons). Credits: A queries + B pages." Max
-3 sample rows. Next steps: enrich-firmographics → score →
-enrich-buying-committee → write-outreach (the angle is ready).
+(50-69), Z rejected (top reasons). Credits: A queries + B pages, en
+`elapsed_s` (relayé depuis le receipt de jobs.py — §8 wall-time)." Max
+3 sample rows. Then STATE the next step, never ASK it (§8, house rule
+0.8.1 — field-tested drift: this receipt shipped ending with "tu veux
+que je lance l'enrichissement ?"): "Prochaine étape :
+enrich-firmographics → score → enrich-buying-committee → write-outreach
+(l'angle est prêt) — dis le mot." A statement the user can act on or
+redirect, not a question that stalls the chain.
 
 ## Volume mode
 

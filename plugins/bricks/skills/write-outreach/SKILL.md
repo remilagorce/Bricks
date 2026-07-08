@@ -43,10 +43,16 @@ and the receipt says why. **Email drafts before the address exists**:
 the default is to WAIT for `email_status='done'` (drafts written for
 addresses that never materialize go stale); drafting early is allowed
 when the user opts in at the GO — drafts are text, sending stays
-gated either way. Then read their companies (pitch, language)
-and their `signals`: only `freshness='fresh'` rows (re-check `date`)
-may be treated as news; `hiring_angle` is a ready-made opener;
-`context` signals are background, never congratulated.
+gated either way. Then read their companies (pitch, language, and the priority columns)
+and their `signals`. The opener is chosen in this order: **`companies.why_now`
+first** (join by the contact's `company_id`) — rank-accounts already fused the
+account's strongest fresh signal into one trigger line, `why_now_url` its
+evidence; it supersedes and generalizes `hiring_angle` (still honored when
+`why_now` is absent). Otherwise fresh `signals` directly: only
+`freshness='fresh'` rows (re-check `date`) may be treated as news; `context`
+signals are background, never congratulated. An empty `why_now` (a no-signal
+account) is not a gap — fall back to the persona's pain point, never fabricate
+a trigger.
 
 ## The copy doctrine (distilled from the team's 2026 corpus)
 
@@ -63,8 +69,8 @@ may be treated as news; `hiring_angle` is a ready-made opener;
 - **Subjects**: plain, never slogans — « prise de contact »,
   « document », « je clôture ? ».
 - **Personalization = one relevant signal connected to the problem**,
-  never decorative trivia. Fresh signals and `hiring_angle` first;
-  enriched columns second; nothing → the company pitch.
+  never decorative trivia. `why_now` (or a fresh signal / `hiring_angle`)
+  first; enriched columns second; nothing → the company pitch.
 - **Tier treatment from strategy.md**: `hot-manual` accounts get the
   mini-audit opener (2 concrete observations about THEIR business);
   warm contacts (lead-magnet, prior interaction) get a feedback ask,

@@ -90,7 +90,7 @@ HIRING_WORDS = re.compile(
     r"(recrut\w+|rejoign\w+|embauch\w+|poste[s]? [àa] pourvoir|"
     r"offre[s]? d'emploi|candidature)", re.I)
 
-state = {"fetches": 0, "errors": []}
+state = {"fetches": 0, "errors": [], "t0": None}
 _state_lock = threading.Lock()
 
 
@@ -499,6 +499,8 @@ def write_out(outdir, kept, rejected, companies, summary):
     summary["spend_credits"] = 0
     summary["fetches"] = state["fetches"]
     summary["errors"] = state["errors"][:20]
+    if state.get("t0") is not None:
+        summary["elapsed_s"] = round(time.perf_counter() - state["t0"], 1)
     with open(out / "summary.json", "w", encoding="utf-8") as f:
         json.dump(summary, f, ensure_ascii=False, indent=2)
     print(json.dumps(summary, ensure_ascii=False))
@@ -620,6 +622,7 @@ def count_reasons(rejected):
 
 
 def main():
+    state["t0"] = time.perf_counter()
     p = argparse.ArgumentParser(description="Hiring-signal hunt engine")
     sub = p.add_subparsers(dest="mode", required=True)
     hunt = sub.add_parser("hunt", help="matrix-driven sourcing (find-hiring-signal)")
