@@ -114,11 +114,17 @@ Schema filled and challenged → call **context-write**, handing it:
 
 1. the complete ICP object (per the schema);
 2. the **mode** — `overwrite` with the target ICP id, or `append`;
-3. the **id of the current workspace** (from `workspace.py status`).
+3. the **id of the current workspace** (from `workspace.py status`);
+4. the **buying committee** — every persona the Phase 2 persona challenge
+   surfaced (decision-maker + champion + any end-user / DG / office-manager
+   layer), so context-write persists one persona file each. If you presented
+   a multi-persona committee in the conversation, ALL of it goes here — do
+   not let it evaporate into a single persona file.
 
 Do not write the context yourself. Relay context-write's receipt to the
-user, and state plainly that this is a **v1 falsifiable ICP** — the next
-bricks (find → enrich → outreach) are what will validate or kill it.
+user (ICP fields + personas persisted), and state plainly that this is a
+**v1 falsifiable ICP** — the next bricks (find → enrich → outreach) are what
+will validate or kill it.
 
 ## Transversal rules (always)
 

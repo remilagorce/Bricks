@@ -24,10 +24,15 @@ Design contract (see CONVENTIONS.md §11):
 - This tool NEVER touches bricks.db.
 
 Worker command: `claude -p --output-format json` by default (runs on the
-subscription). Override with BRICKS_WORKER_CMD (e.g. an Agent SDK wrapper,
-or a mock for tests) — an override is used VERBATIM: it must accept the
-prompt on stdin and print the answer JSON; model/MCP flags are only
-appended to the default command.
+subscription, cold-starts a CLI per row). Override with BRICKS_WORKER_CMD
+(e.g. tools/worker_api.py — a lightweight Anthropic-API worker with no CLI
+cold-start, or a mock for tests) — an override is used VERBATIM: it accepts
+the prompt on stdin and prints the answer JSON. Model/MCP flags are only
+appended to the DEFAULT command, but the run's context is exported to every
+override via env: BRICKS_WORKER_MODEL, BRICKS_WORKER_TOOLS,
+BRICKS_WORKER_MAX_PAGES (BRIGHTDATA_API_TOKEN is already in the env). This is
+how a custom worker learns whether the lane is web-enabled and which model to
+use — the CLI ignores these vars.
 
 schema.json format:
     {"fields": {"telephone": "numéro du standard, format international",
@@ -184,18 +189,33 @@ def _worker_cmd(tools: str, model: str | None, max_pages: int,
 
 def research(merged_prompt: str, schema: dict, tools: str = "none",
              model: str | None = None, max_pages: int = DEFAULT_MAX_PAGES,
-             timeout: int = DEFAULT_TIMEOUT) -> dict:
-    """Run ONE agent, return ONE validated answer. Raises ResearchError."""
+             timeout: int = DEFAULT_TIMEOUT, retry_on_timeout: bool = True) -> dict:
+    """Run ONE agent, return ONE validated answer. Raises ResearchError.
+
+    The worker gets ONE retry on a bad/malformed answer (transient). A TIMEOUT
+    retries too by default (retry_on_timeout=True, backward-compatible), but a
+    re-run at the SAME timeout usually just times out again — so an escalation
+    ladder (higher --timeout on the failures) passes retry_on_timeout=False to
+    fail fast and pay 1× instead of 2× on the condemned rows.
+    """
     if tools not in ("none", "web"):
         raise ResearchError(f"invalid --tools {tools!r} (none|web)")
     prompt = build_worker_prompt(merged_prompt, schema, tools, max_pages)
     last_error = None
+    # Export the run's context to any BRICKS_WORKER_CMD override (the override
+    # is called verbatim, so flags can't carry it). Harmless for `claude -p`,
+    # which ignores unknown env vars.
+    child_env = dict(os.environ)
+    child_env["BRICKS_WORKER_TOOLS"] = tools
+    child_env["BRICKS_WORKER_MAX_PAGES"] = str(max_pages)
+    if model:
+        child_env["BRICKS_WORKER_MODEL"] = model
     with tempfile.TemporaryDirectory(prefix="bricks-researcher-") as tmpdir:
         cmd = _worker_cmd(tools, model, max_pages, tmpdir)
         for attempt in (1, 2):
             try:
                 proc = subprocess.run(cmd, input=prompt, capture_output=True,
-                                      text=True, timeout=timeout)
+                                      text=True, timeout=timeout, env=child_env)
                 if proc.returncode != 0:
                     detail = proc.stderr.strip() or proc.stdout.strip()
                     try:
@@ -207,10 +227,13 @@ def research(merged_prompt: str, schema: dict, tools: str = "none",
                     raise ResearchError(
                         f"worker exited {proc.returncode}: {detail[:200]}")
                 return validate_answer(schema, parse_worker_output(proc.stdout))
-            except (ResearchError, subprocess.TimeoutExpired,
-                    json.JSONDecodeError) as exc:
+            except subprocess.TimeoutExpired as exc:
                 last_error = exc
-    raise ResearchError(f"worker failed after retry: {last_error}")
+                if not retry_on_timeout:
+                    break  # re-running at the same timeout would time out again
+            except (ResearchError, json.JSONDecodeError) as exc:
+                last_error = exc
+    raise ResearchError(f"worker failed: {last_error}")
 
 
 def main(argv=None) -> int:
@@ -224,13 +247,17 @@ def main(argv=None) -> int:
                         help="worker model (appended to the default command)")
     parser.add_argument("--max-pages", type=int, default=DEFAULT_MAX_PAGES)
     parser.add_argument("--timeout", type=int, default=DEFAULT_TIMEOUT)
+    parser.add_argument("--no-retry-timeout", action="store_true",
+                        help="fail fast on a timeout instead of retrying it "
+                             "(for escalation ladders)")
     args = parser.parse_args(argv)
     try:
         schema = load_schema(args.schema)
         with open(args.prompt_file, encoding="utf-8") as f:
             merged = f.read()
         answer = research(merged, schema, args.tools, args.model,
-                          args.max_pages, args.timeout)
+                          args.max_pages, args.timeout,
+                          retry_on_timeout=not args.no_retry_timeout)
     except (ResearchError, OSError, json.JSONDecodeError) as exc:
         print(json.dumps({"ok": False, "error": str(exc)}, ensure_ascii=False),
               file=sys.stderr)

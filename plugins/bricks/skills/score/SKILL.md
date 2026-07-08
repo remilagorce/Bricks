@@ -59,6 +59,20 @@ spec. The three kinds map to what users say:
 
 Rules for writing measures — this is where scoring quality is decided:
 
+- **Judge on real signal, never on a label.** A `measure`'s `rubric.input`
+  must point at a column carrying genuine per-row content (a description, a
+  scraped page, a rich free-text field). If the only inputs available are
+  coarse labels (`industry`, `segment`, a sector tag) — especially ones a
+  deterministic rule already uses — the judge has nothing to read: it just
+  echoes the label back, producing confident-but-hollow scores that don't
+  discriminate (field-tested: a "travel intensity" measure fed only the
+  sector tag scored a data/BI firm 10 and a near-identical one 5). Two ways
+  out, both better than a hollow judge: (a) if the label is enough, make it
+  a deterministic `conditional` on that column — no judge, no cost, fully
+  explainable; (b) if it truly needs judgment, ENRICH the descriptive
+  column first (it's free to re-score once the data lands), then judge on
+  it. When neither is possible, say so in the receipt and mark the axis as
+  a low-confidence inference rather than presenting it as a measured score.
 - **Force intermediate anchors.** If the user only gave the extremes
   ("10 = deep tech, 1 = innovation produit"), propose 2 intermediate
   anchors and get a quick confirmation — anchors are what make two
@@ -135,3 +149,9 @@ the user wants them.
 
 Close the run: `memory/state.json` (rundir, counts), one `NOTES.md`
 line ("scored N rows: rules X/Y/Z, K killed").
+
+End the receipt with a **statement of the next step, never a question**
+(CONVENTIONS §8: receipts end with statements). State the recommended
+next move as a fact the user can act on — "Next: enrichir la description
+puis re-scorer l'axe X — dis le mot" — not "tu veux enrichir ou passer aux
+contacts ?". One announced direction, the user redirects if they disagree.

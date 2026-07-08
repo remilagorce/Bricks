@@ -2,8 +2,11 @@
 
 The reference plan for the team. Architecture rules live in
 `plugins/bricks/CONVENTIONS.md`; per-skill contracts in each skill's
-`BRICK.md`. This file says where we are going, how we work today, who owns
-what, and the IN → OUT contract + strategy of every block, shipped or not.
+`BRICK.md`. Read this file to know, in order: **where we are going**
+(§1 target), **how we build** (§2 star), **where we are** (§3 status +
+field-test log), **how the data actually flows — Python / session /
+engine** (§4), **every brick IN → does → OUT** (§5 catalog), and **what's
+next** (§6 milestones).
 
 ---
 
@@ -74,6 +77,7 @@ next week automatically joins existing motions.
 | Perf overhaul: db.py called direct (agent layer removed) + `claim` atomic + CONVENTIONS §9 waves-not-rows + parallel engines | Robin | ✅ shipped 0.11.0→0.14.0 (engine outputs proven identical; claim concurrency-tested; field run pending) |
 | THE ENGINE: runner.py + researcher.py + web-researcher skill + CONVENTIONS §10-§11 (data plane, pilot wave) | Robin | ✅ shipped 0.15.0 (12-scenario mock bench green; real `claude -p` + Bright Data web lane: field run pending) |
 | Engine `--action fetch` + fullenrich_people adapter (HTTP API, title-wave cascade) + find-company-people engine lane | Robin | ✅ shipped 0.16.0 (stub-API bench green: cascade, masked filter, dedup, child rollback; real API + key: field run pending) |
+| Engine worker lanes: `worker_api.py` light worker + concurrency cap 10→50 + `haiku` default + calibrated-single-shot doctrine (escalation ladder tested & REJECTED) | Robin (engine = shared w/ Rémi) | ✅ shipped 0.18.0→0.20.1 (6 A/B runs on gtmia-agent; ladder lost on both workers; doctrine = single shot + `too_long`→`sonnet` recovery, worker = budget choice — Rémi review pending) |
 | workspace / interface / find / enrich / transform / scan-mentions | Rémi | ✅ shipped (find + enrich patched after test #1) |
 | find-directory-scrape / find-lookalike / write-outreach / playbook-lookalike | Robin | ✅ shipped |
 | enrich-firmographics (+ tools/firmo.py, official gov API) | Robin | ✅ shipped, field-tested ×2 |
@@ -91,7 +95,7 @@ next week automatically joins existing motions.
 ### Field-test log — the loop that improves the product
 
 Every fix below came from a real desktop test session. Plugin version at
-head: **0.17.2**.
+head: **0.20.2**.
 
 | Version | Trigger | What changed |
 |---|---|---|
@@ -125,16 +129,162 @@ head: **0.17.2**.
 | 0.15.0 | architecture review with Robin (Claygent model) — three fears named: 5 000 wrong rows discovered too late, MCP bulk data rotting the session context, per-skill iterators multiplying; plus the field truth that any per-row question should be enrichable without a specialized brick | THE ENGINE shipped: `tools/runner.py` (the only loop — claim by tranches with a per-run re-claim guard, `{{column}}` merge validated BEFORE spend, actions `agent`/`set`, wave writes, reconciled receipts, `--preview 10` in-base + rollback by run manifest + `release` for crashed rows, workers hard-capped ~10) + `tools/researcher.py` (ONE disposable agent per row, `claude -p` default / `BRICKS_WORKER_CMD` override, Bright Data MCP optional `--tools web` capped by `--max-pages`, structured multi-field answers validated, never invents) + NEW skill web-researcher (any question → columns; ≲5 rows stay in-session) + CONVENTIONS §10 control/data plane (the "does the model need to READ it?" test, FullEnrich CSV exports mandatory >~20 rows, sponge subagents, pilot wave) + §11 engine contract + CLAUDE.md Rule 4. 12-scenario mock bench green (template refusal pre-spend, preview/commit/idempotence, retry no-loop, rollback, release, set, error columns); real `claude -p` auth unavailable in the build sandbox — field run pending |
 | 0.16.0 | find-company-people questioned again: the MCP search is a 10-result preview capped per call and everything ran in session; Robin's requirements — FullEnrich's HTTP API in the usual Python loop, intelligence in the QUERY (title synonyms of the same activity, cascade "not found with kw1 → retry kw2", never semantic drift: GTM engineer ≠ SDR), reuse the SAME runner (arguments differ, scripts don't) | engine `--action fetch` shipped: `tools/fetchers/` adapter contract (`fetch(row, params) → {status, rows, evidence, credits}`) + `fullenrich_people.py` (POST /api/v2/people/search verified in their docs — Bearer `FULLENRICH_API_KEY`, `current_company_domains`/`current_position_titles`/`current_position_seniority_level`, shared rate limiter; title-WAVE cascade per group, stop at first verified wave; accept rules: current-employment domain match, masked names never inserted; per-call `metadata.credits` summed into the receipt) + runner `--out-table` child-row inserts (dedup `person_key`, `source_run` tag, thin-row relay `profile_status='pending'`, rollback now removes child rows) + find-company-people engine lane (params compiled ONCE — strict-synonym doctrine, groups per explicit role; session sweep kept as no-key fallback). Stub-API bench green: cascade vague1→vague2, masked filter, wrong-domain filter, dedup across runs, child rollback, idempotence, agent/set regression |
 | 0.16.1 | first desktop field run of the engine (gtmia-agent workspace) — the WHOLE 0.15/0.16 flow held (drift guardrail → onboarding → find with CSV-export lane → import → interface → prompt compile → preview) EXCEPT the workers: desktop's sandboxed Bash cannot read the macOS Keychain, so nested `claude -p` answered "Not logged in" (the preview failed clean: rows reset, zero spend — the failure path worked as designed); Robin is desktop-only, keys must live in files, not per-session exports | `tools/envfile.py` shipped: the engine self-loads `~/.bricks/env` (KEY=value, chmod 600, outside every repo) at import — worker auth via `CLAUDE_CODE_OAUTH_TOKEN` (one-time `claude setup-token`) OR `ANTHROPIC_API_KEY` (browser-created, API billing — the zero-terminal path), plus `FULLENRICH_API_KEY`, `BRIGHTDATA_API_TOKEN`; shell exports keep precedence; researcher + fetchers wired, template file scaffolded on the user's machine; bench: fetcher key from file only ✅, worker inherits token from file ✅, shell precedence ✅ |
+| 0.17.3 | gtmia-agent field run: the session's direct Bright Data calls returned empty for a whole run — diagnosed as TWO problems: (a) a dictated French sentence had been pasted into BRIGHTDATA_API_TOKEN via the ⚙ panel and silently accepted, (b) the desktop app (Finder-launched) never sees ~/.bricks/env so `.mcp.json`'s ${BRIGHTDATA_API_TOKEN} expanded empty for the SESSION connector (the engine lane was fine) | `envfile.set_key` now REJECTS whitespace / <8-char values (front + CLI, clear French error); bad value scrubbed; login LaunchAgent publishes the token to the GUI env via `launchctl setenv` (reads ~/.bricks/env, skips blank/whitespace/placeholder); real token re-pasted, validated live against the Bright Data MCP (`initialize` → HTTP 200, serverInfo brightdata-mcp); CONVENTIONS §11 documents the two-lane token model + the desktop fix |
 | 0.17.1-0.17.2 | authors credit (Robin added) + Robin: each key in the panel must say EXACTLY where to obtain it | manifests author « Rémi Lagorce & Robin Jehanno » · KNOWN_KEYS carry `how`/`url`/`command` (clickable console.anthropic.com → API Keys, app.fullenrich.com, brightdata.com/cp; `claude setup-token` shown as a copyable chip) rendered under each key in the ⚙ modal — live-preview verified |
 | 0.17.0 | Robin: keys must be manageable WITHOUT files-and-terminal gymnastics — auto-recognized, asked for when missing, and visible/editable in the front behind a settings gear | `envfile.py` grew `status`/`set` (CLI + module — values ALWAYS masked to their last 4 chars, unknown keys rejected, commented placeholders replaced in place, chmod 600 kept) · front: ⚙ topbar button + settings modal (per-key status dot, label + where-to-get-it hint, paste-and-save input; POST `/api/settings` never echoes values) · server: GET/POST `/api/settings` reusing envfile as the single door · doctrine §11: missing key → ask in chat (provider keys only — the OAuth token NEVER transits the chat) → `envfile.py set` → re-run; interface skill mentions the gear. Bench: CLI roundtrip ✅, endpoints ✅ (bad key → 400, full value absent from every response), UI save flow verified in live preview ✅ |
+| 0.18.0 | perf study on gtmia-agent (Robin: web runs slow vs Clay) — A/B on engine concurrency (see the worker-lanes subsection below) | `--workers` cap 10→20 (default 12); agent rows default to `--model haiku` (was the CLI's heavy default) — the two cheapest speed/cost levers, matching Anthropic's effective-agents + multi-agent-research guidance |
+| 0.19.0 | A/B RUN A vs B: 50 `claude -p` workers COLLAPSE (0 done — a heavy CLI per row oversubscribes the local Mac's CPU) while 12 hold (369s / 42-of-50 answered); per-row ≈88s so the cold-start is noise next to the web navigation | `--workers` cap → 50; NEW `tools/worker_api.py` — a lightweight Anthropic-API worker (no CLI cold-start, haiku, web via the API's server-side MCP connector, opt-in through `BRICKS_WORKER_CMD`); `researcher.py` exports the run context (model / tools / max-pages) to any override so a custom worker can drive the web lane too |
+| 0.20.0 | A/B RUN C: `worker_api` HOLDS at 30 workers (133s, ~2.8× faster) where `claude -p` died at 50 — but it bills API credits and hit the account usage cap after 4 web runs; the escalation-ladder test LOST on `claude -p` (a low first timeout sits under the cold-start, and an internal double-retry doubles each timed-out row's cost) | `--no-retry-timeout` (fail a timed-out row on the first try so an escalation ladder pays 1× not 2×; default keeps the retry — backward-compatible, verified 2→1 attempts) + CONVENTIONS §11 worker-per-lane doctrine + the old wrong "workers are I/O-bound, ceiling = rate limit" line corrected (`claude -p` is local-CPU-bound) |
+| 0.20.2 | scénario 1 « base propre + ICP + no-signal control » (workspace notes-de-frais-daf) — le flux a tenu (drift guardrail impeccable, sourcing gratuit, score auto-débusqué) mais 4 écarts : (a) le 1er `db.py add` a planté car `--db` placé APRÈS la sous-commande (argparse global-only), auto-corrigé ; (b) une mesure `score` jugée sur la seule étiquette secteur → jugements creux et incohérents (data/BI noté 10 vs 5) ; (c) comité d'achat à 3 personas montré mais un seul fichier persona persisté ; (d) récaps `find`/`score` finissant par une question (doctrine = statements) | `db.py` accepte `--db`/`--root` AVANT ou APRÈS la sous-commande (parents=[dbflags], defaults SUPPRESS ; testé les deux positions) + CONVENTIONS §5 le documente · `score` doctrine « juger sur un vrai signal, jamais une étiquette » (sinon `conditional` déterministe, ou enrichir la colonne descriptive puis re-scorer gratuit) · `score` récap se termine par un statement (§8) · `context-write` persiste un fichier persona par rôle du comité + `gtm-onboard` Phase 3 lui transmet tout le comité |
+| 0.20.1 | ladder verification on BOTH workers — predicted to WIN on `worker_api`, it LOST (283s / 28 done — the worst worker_api run) and also lost on `claude -p` (473s / 41 done: beat the 720s broken ladder but still under single-shot RUN A's 369s). Root cause: with no cold-start there's no fixed per-row cost to amortise, so rungs only STACK timeouts on slow rows. The one useful piece — oversized page → `sonnet` recovery — fired for real (1 `haiku`-overflow row recovered in 16s) | CONVENTIONS §11 CORRECTED: escalation ladder DROPPED (loses on both workers); doctrine re-anchored on a calibrated SINGLE SHOT + one `too_long`→`sonnet` recovery pass; worker choice reframed as speed-vs-cost (`worker_api` faster everywhere but metered API credits + cap; `claude -p` slower but free/uncapped). Process lesson: don't enshrine a technique before a field test confirms it — the 0.20.0 ladder was premature, fixed here |
 
 Full pipeline validated in the field at **0 credits** end to end:
 sourcing (FullEnrich free preview) → firmographics (official API) →
 one verified decision-maker per company (registry + free searches).
 
+### Engine worker lanes — the perf study (0.18.0 → 0.20.1)
+
+At ~500 rows the engine's web-research lane felt slow next to Clay. We
+A/B-tested the engine on a real 50-site batch (workspace `gtmia-agent`) to see
+where the time goes and which settings help. The terms below recur, so here they
+are in plain language first — read them before the results.
+
+**Terms.**
+- **Row** — one unit of work: one company, one website to check.
+- **Worker** — the process that handles ONE row. The engine runs several at
+  once; `--workers N` = how many rows are worked in parallel.
+- **`claude -p`** — the DEFAULT worker. For each row it boots a full Claude Code
+  command-line program. Capable, but heavy and slow to start up.
+- **Cold-start** — the seconds a worker wastes booting up before it can do any
+  real work (~10-20 s for `claude -p`).
+- **`worker_api.py`** — the lightweight worker we added. Instead of booting the
+  CLI, it calls Anthropic's API directly, and the web browsing runs on
+  Anthropic's servers — so on your machine it's just one small network call.
+  Quick to start, but it spends Anthropic **API credits**, not the flat-rate
+  subscription that `claude -p` uses.
+- **`--tools web` / `--tools none`** — a row that DOES navigate the web (slow, a
+  cost per page) vs one that only reasons over data already in the row (fast,
+  cheap).
+- **Timeout** — the maximum seconds a worker is allowed before we give up on
+  that row and mark it failed.
+- **A/B test** — run the same job twice changing exactly ONE thing, then compare.
+
+**What the A/B tests showed** (same 50 sites, one yes/no web question, `haiku`):
+
+| Method | Worker | `--workers` | Timeout | Wall time | Rows answered |
+|---|---|---|---|---|---|
+| Single shot A | `claude -p` | 12 | 120 s | 369 s | 42 / 50 |
+| Single shot B | `claude -p` | 50 | 120 s | — | **0 / 50 (collapsed)** |
+| Single shot C | `worker_api` | 30 | 60 s | **133 s** | 38 / 50 |
+| Ladder | `claude -p` | 12 | 90→120 s | 473 s | 41 / 50 |
+| Ladder | `worker_api` | 30 | 45→90 s | 283 s | 28 / 50 |
+
+`worker_api` single-shot (133 s) is the fastest of all; both ladders lose.
+
+- **More `claude -p` workers ≠ faster.** At 50, every worker timed out (0 done):
+  `claude -p` is heavy and limited by the local machine's CPU, and 50 of them on
+  one Mac oversubscribe it. Even 12 already show contention. The ceiling here is
+  a LOCAL limit (~12-16), not a network one — which corrected an earlier wrong
+  assumption in the doctrine.
+- **The real per-row cost is the web navigation (~88 s), not the cold-start.** A
+  single site on its own answers in ~23 s; the rest is page-fetching + contention.
+- **The lightweight worker is how you actually parallelise.** `worker_api` held
+  30 workers where `claude -p` died at 50, and ran ~2.8× faster — because the
+  heavy work runs on Anthropic's servers, not the Mac. Its price: API credits (a
+  ~50-row web run repeated a few times hit the account's usage cap).
+- **The escalation ladder LOSES — on both workers (the surprise).** We tested a
+  "timeout ladder": run everyone fast at a low timeout, then re-run ONLY the
+  failures at a higher one. The engine targets failures precisely (proven — each
+  rung re-runs only its own survivors), but the method itself loses. On
+  `claude -p` (473 s) the cold-start means no rung is ever cheap. On `worker_api`
+  (283 s — the WORST worker_api run) there is no cold-start to amortise, so
+  splitting only STACKS timeouts on the slow rows: a slow site times out at rung 1
+  AND at rung 2, burning both, where one wide shot would have finished it. The one
+  piece worth keeping is the **too-long recovery**: a page too big for `haiku`'s
+  200k context is re-run on `sonnet` (1M context) — it recovered a row every
+  single-shot run had left failed.
+
+**The modifications, in order.**
+- **0.18.0** — raised the parallel-worker cap (10 → 20) and made web/agent rows
+  default to `haiku` (Anthropic's fast, cheap model) instead of the CLI's heavier
+  default. The two cheapest speed-and-cost wins.
+- **0.19.0** — raised the cap to 50 and shipped **`worker_api.py`**, the
+  lightweight worker (opt-in via the `BRICKS_WORKER_CMD` switch); the engine now
+  hands each run's settings (model, web on/off, page budget) to it.
+- **0.20.0** — added **`--no-retry-timeout`** (a timed-out row fails on the first
+  attempt instead of retrying at the same timeout; the old retry stays the
+  default, so existing runs are unchanged) and first wrote the worker-per-lane
+  doctrine into `CONVENTIONS §11`.
+- **0.20.1** — **corrected the doctrine after the ladder tests**: dropped the
+  escalation ladder (it loses on both workers), kept only the too-long → `sonnet`
+  recovery pass, and re-anchored §11 on a calibrated single shot. Process note:
+  in 0.20.0 the ladder was written into the doctrine *before* it was
+  field-proven — exactly what the field-test loop exists to catch. Fixed here.
+
+**The doctrine in one line.** Always a calibrated **single shot**, never the
+ladder. Choose the worker by BUDGET, not speed — `worker_api` is faster in every
+case, but it spends API credits and can hit a usage cap; `claude -p` is slower but
+free and uncapped on the subscription. So: speed + API budget → `worker_api` at
+30+; big cheap volume → `claude -p` at ~12-16; no-web work → `worker_api`. The
+timeout is the one number you can't guess — measure it on a small sample (~60-90 s
+for a 3-page web question) — and add ONE `too long → sonnet` recovery pass only if
+oversized pages show up.
+
+_The perf investigation is closed: the ladder is rejected, the winner is a
+calibrated single shot + optional too-long recovery, and the worker is a budget
+choice. Any next engine-perf idea gets the same treatment — measured before it
+enters the doctrine._
+
 ### To build — Robin (data in)
 
-signal-sillage
+**Hackathon Track 1 (Acquisition) — the missing bricks.** The infra
+already covers ~70% of Track 1 (find → enrich → signals → score →
+plan-outreach → write-outreach). These four close the gaps and target
+the judging criteria (esp. #3 "depth of external data, FullEnrich &
+Sillage"). Format: IN → does → OUT · [mode].
+
+1. **signal-sillage** — THE priority (hits criterion #3 "…& Sillage"
+   directly — without it, we cap ~12/25 on external-data depth). · IN:
+   `companies`/`contacts`. → `fetchers/sillage.py` (HTTP, Mode A, same
+   shape as `fullenrich_people.py`) pulls Sillage intent signals per
+   account, driven by `runner.py --action fetch`. → OUT: `signals` rows
+   `kind='intent'` (+ `intent_score`, evidence). · [A/C]
+
+2. **rank-accounts** — the pitch's brain ("the agent tells you WHO to
+   call first and WHY"). · IN: every signal column (hiring + Sillage
+   intent + news + job-change). → a `score` preset that fuses them into
+   a `/100` + a one-line `why_now` (who + angle). → OUT: `priority_score`,
+   `why_now`, a sorted call-list. Mostly a scoring spec — little code,
+   big demo effect. · [A kernel + C judges]
+
+3. **warm-intro** — the unique differentiator (no other team will have
+   it). · IN: target `contacts` + the user's own LinkedIn export / team
+   profiles (their consented data). → matches on shared employer, shared
+   school (FullEnrich education/employment data), mutual connection. →
+   OUT: `warm_path` ("both ex-Google", "HEC 2015", "via X"). Deep
+   FullEnrich use → more criterion-#3 points. · [B/C]
+
+4. **inbound-qualify** — the live wow ("paste an email → 10s → qualified,
+   routed, reply drafted"). · IN: an inbound lead (email/domain). →
+   instant FullEnrich enrich + `score` vs ICP + route (hot→call /
+   warm→sequence / junk→drop) + reply draft. → OUT: qualified & routed
+   lead, `messages` draft. A playbook composing existing bricks — little
+   new code, huge in Q&A. · [B]
+
+5. **write-outreach — phone lane (extend, don't fork).** Track 1 wants
+   "email, LinkedIn, phone". write-outreach covers email + LinkedIn;
+   add a `phone` channel that drafts a call script + talking points from
+   the same fresh signals (numbers already come from FullEnrich enrich).
+   → OUT: `messages` rows `channel='phone'` (script, not sent). · [B]
+
+6. **find-maps** — source companies from Google Maps (local/SMB
+   sourcing, the sibling of find-directory-scrape). · IN: a business
+   category + geography ("plombiers à Lyon", "growth agencies in
+   Austin"). → `fetchers/gmaps.py` (HTTP/Bright Data, Mode A/C via
+   `runner.py --action fetch`) pulls Maps listings: name, domain,
+   address, phone, rating, review count. → OUT: `companies` rows
+   (`source=gmaps`, deduped on domain, name-checked when domain-less).
+   Feeds enrich → score like any other sourcing brick. · [A/C]
 
 > Considered & rejected: **enrich-company** — a standalone "enrich a company"
 > brick would duplicate the generic `enrich` skill (any company column via
@@ -144,8 +294,19 @@ signal-sillage
 
 ### To build — Rémi (data out)
 
-onboard · score-kill-gate + score-icp-fit · crm-import · crm-push ·
-outreach-send (+ send-guard hook + workspace permission allowlist)
+crm-import · crm-push · outreach-send (+ send-guard hook + workspace
+permission allowlist).
+
+**Hackathon Track 1 — for Rémi:** **cadence-ab** — "multi-channel cadences
+that A/B test themselves". write-outreach already writes the sequences;
+this adds N variants per step (tagged `variant`), then — once
+outreach-send + reply capture exist — measures replies and promotes the
+winner. Full loop needs the send/track infra (Rémi's data-out lane),
+hence his. Demo-only slice: generate A/B variants + the rationale.
+
+_Shipped since this list was written: gtm-onboard (guided interview),
+score (kill gate + tiers), web-researcher + THE ENGINE,
+find-company-people engine lane._
 
 ### Thomas (10%)
 
@@ -155,464 +316,238 @@ issue per brick, assign = claim) · demo script.
 
 ---
 
-## 4. Block contracts — IN → OUT + strategy
+## 4. How the data flows — Python? session? agent?
 
-### Shipped blocks
+This is the single most important thing to understand about Bricks. Every
+brick does its per-row work in exactly ONE of three modes.
 
-**workspace** (Rémi ✅)
-- IN: a name/goal from the user, or nothing (auto-resolution).
-- OUT: `bricks/workspaces/<name>/` scaffolded (context/, bricks.db,
-  staging/, memory/), current workspace set, banner displayed.
-- Strategy: pure plumbing via `workspace.py` — deterministic script, no LLM
-  judgment. The SessionStart hook re-displays the banner so the user always
-  knows which world they are in.
+**Mode A — deterministic Python (zero model).** A plain script does the
+work: HTTP calls to free/keyed APIs, parsing, dedup, scoring math. No LLM
+token spent, and the raw data NEVER enters any context — it goes script →
+staging file → database. Fast, cheap, reproducible, identical every run.
+- Tools: `firmo.py` (French gov company API), `jobs.py` (France Travail /
+  HelloWork / career pages), `news.py` (Google News RSS), `db.py` (the
+  database door), the `score.py` kernel, `fetchers/fullenrich_people.py`
+  (FullEnrich people-search HTTP API).
 
-**find** (Rémi ✅, patched)
-- IN: target criteria (user + `context/icp.md`).
-- OUT: `companies` (name, domain, source, status) / `contacts` rows,
-  deduped on domain/email.
-- Strategy: source priority — FullEnrich search when connected (free
-  preview 10 + count, then money gate) for firmographic segments; Bright
-  Data / directory scraping for niche local commerce; web search last, with
-  domain verification. Receipt states which source was used and why.
+**Mode B — the session model (the conversation itself).** The main Claude
+you talk to reads results and decides: it drives MCP tools (FullEnrich
+search, Bright Data scrape), applies the verification rules, compiles the
+prompts. Best for SMALL volumes (≲ 5–40 rows), judgement, and anything
+conversational (adding two contacts by voice, a one-off question). The
+catch: MCP results ride the context, so Mode B does NOT scale to thousands
+of rows.
 
-**enrich** (Rémi ✅, patched)
-- IN: rows with `X_status='pending'`, the column(s) to fill, the source
-  kind.
-- OUT: filled cells + statuses, columns created on the fly.
-- Strategy: two source families — FullEnrich MCP for contact/firmographic
-  data (hard gate: never fabricate, never scrape around it); Bright Data
-  `scrape_as_markdown` for web-content columns (WebFetch fallback for
-  simple pages, auto-retry blocked rows through Bright Data once).
-  Batches of 5-8 rows, up to 10 subagents in parallel, each appending
-  findings to staging as results arrive; the main thread commits via db.py.
+**Mode C — THE ENGINE (headless disposable agents, at volume).**
+`runner.py` loops over rows in tranches; for each row it spawns ONE
+throwaway agent (`researcher.py`, a `claude -p` worker with the Bright Data
+MCP optional) that reads its row + its pages in ITS OWN disposable context
+and returns a validated structured answer; `runner.py` writes results in
+waves through `db.py`. The session model never sees a row or a scraped page
+— only the final reconciled receipt. This is how per-row AI work reaches
+5 000+ rows without rotting the context. Preview 10 → GO → mass;
+`runner.py rollback` undoes a run; statuses are the checkpoint.
 
-**transform** (Rémi ✅)
-- IN: an existing table + an instruction (dedupe, filter, derive, score…).
-- OUT: modified/derived rows or tables.
-- Strategy: express the transform as db.py operations; deterministic
-  rules first (SQL-able), judgment only for ambiguous leftovers.
+### The data-plane rule (why the modes matter)
 
-**scan-mentions** (Rémi ✅)
-- IN: one question about one company's website.
-- OUT: a short evidence-backed answer in the conversation (no table write).
-- Strategy: Bright Data site scan (JS + anti-bot), quote the evidence,
-  answer directly — the one brick whose output is conversational by design.
+Before any data enters the conversation, one test: **does the MODEL need to
+READ it to decide something?**
 
-**interface** (Rémi ✅)
-- IN: nothing.
-- OUT: the local web UI on 127.0.0.1:4321, live view of every table.
-- Strategy: `front/server.py` imports the same `db.py` module the skills
-  use — UI and engine cannot disagree. Auto-refresh, row selection/delete.
+- **No** → it never touches the context. It moves by FILE: a provider CSV
+  export (FullEnrich `export_*`) → `staging/` → `db.py import-csv`, or a
+  Python fetcher → staging → DB. (Mode A.)
+- **Yes, small volume** → it enters, capped: 10-row previews,
+  `select --limit`, ≤ 3 sample rows in receipts. (Mode B.)
+- **Yes, at volume** → it enters a DISPOSABLE context, never the session's:
+  engine workers (Mode C), or sponge subagents for in-session volume.
 
-**find-directory-scrape** (Robin ✅)
-- IN: a directory/exhibitor-list/listicle URL (or a description resolved
-  via search_engine + user confirmation).
-- OUT: `companies` rows, `source='directory:<host>'`, deduped on domain;
-  domain-less entries name-checked, never guessed.
-- Strategy: Bright Data `scrape_as_markdown` (JS + anti-bot delegated,
-  hosted endpoint — no local install). Scout page 1 → announce plan
-  (pages × ~1 credit, caps 10 pages/200 entries) → subagents scrape page
-  batches into staging JSONL → validate → db.py commits. Optional
-  second pass for detail pages (`scrape_batch`).
+Everything else is bookkeeping: the database is the bus AND the checkpoint
+(statuses `pending → running → done | not_found | failed` make every run
+resumable, idempotent, never paid twice); `~/.bricks/env` self-loads the
+keys (the front's ⚙ writes it, values masked); the front reads the DB live
+so a column fills in the UI as its wave commits.
 
-**find-lookalike** (Robin ✅)
-- IN: seed customers = `companies WHERE segment='seed'` (from crm-import,
-  CSV or dictated list; collected by the skill if absent) + their enriched
-  columns.
-- OUT: candidate `companies` rows, `source='lookalike:<seed-domain>'`;
-  seeds never modified, seed domains never become prospects.
-- Strategy: seeds live IN the companies table so every enrichment brick
-  (present and future) sharpens the pattern for free. Read everything the
-  seeds have, state the pattern + discriminating signal, get user
-  confirmation BEFORE searching, then 3-5 similarity queries per seed
-  (search_engine or web search), subagents → staging → validated commit.
-  Full motion (enrich-first) belongs to playbook-lookalike.
+### How each data source moves (quick map)
 
-**write-outreach** (Robin ✅ — renamed + extended from write-sequence, 0.9.0)
-- IN: `contacts` with `channel_plan` set (by plan-outreach) + pending
-  sequence + the lane prerequisite (email lane: `email_status='done'`;
-  linkedin lanes: `linkedin_url`); HARD gates `context/strategy.md` +
-  `offer.md`; soft gate `voice.md` (the SENDER's voice — tu/vous, ton,
-  interdits, signature; missing → defaults folded into the GO);
-  personas (the RECIPIENT's angle) + fresh signals / `hiring_angle`.
-- OUT: `messages` rows per step — `channel` = `email` |
-  `linkedin-invite` | `linkedin-dm`, `send_day` from the strategy's
-  template, `status='draft'` forever,
-  `msg_key='<contact_id>-<channel>-<step>'` — +
-  `sequence_status='done'`. Email drafts feed outreach-send later;
-  LinkedIn drafts are copy-paste material (automated LinkedIn sending
-  stays out by doctrine).
-- Strategy: EXECUTES strategy.md, never invents positioning. CPPC
-  (contexte → problème posé en sujet, jamais assené → UNE proposition
-  → UNE question), email < 100 mots, LinkedIn = a chat (invite ≤ 300
-  chars, DM 2-4 lines), plain subjects, personalization = one relevant
-  signal connected to the problem (fresh signals + hiring_angle
-  first), hot-manual tier = mini-audit opener, warm = feedback ask.
-  Forbidden: talking about yourself, selling in the message,
-  placeholders, invented facts.
-
-**playbook-lookalike** (Robin ✅)
-- IN: best customers from ANY source (CRM credential detected by shape,
-  CSV, dictated).
-- OUT: a filtered lookalike list matching the discriminating signal.
-- Strategy: 5 phases through the bus — import seeds → enrich them with
-  every installed enrichment brick (runtime discovery) → analyze + confirm
-  the discriminating signal with the user → source candidates (lookalike /
-  FullEnrich filters / directories) → re-enrich candidates on the
-  discriminating column(s) only, cheapest first, and keep the matches.
-  Two human checkpoints; resumable at every phase.
-
-### Shipped since — Robin
-
-**enrich-firmographics** ✅
-- IN: `companies.name` (+ optional city/postal/domain hints),
-  `firmo_status='pending'`.
-- OUT: `employees`, `industry`, `naf`, `siren`, `city`, `executives`
-  columns (+ `firmo_source='estimate'` for pass-3 grade data).
-- Strategy: pass 1 — ONE batched call to `tools/firmo.py` hitting the
-  official French government API (recherche-entreprises.api.gouv.fr):
-  free, no key, self rate-limited, impossible to block — resolves most
-  rows in seconds, executives included. Pass 2 — ambiguous names only:
-  Bright Data reads the site's legal page (SIREN is legally published
-  there) to pick the right record, ~1 credit/row. Pass 3 — non-French:
-  site + public LinkedIn estimate, flagged. Cheap columns → run early,
-  feeds the kill gate AND enrich-buying-committee.
-
-**enrich-buying-committee** ✅ — full functioning
-
-- IN: firmographics-enriched companies (`employees`, `executives`,
-  `parent_company`, `company_category`, `committee_status='pending'`) +
-  `context/offer.md` + `context/icp.md` (Buying roles) + `personas/`.
-- OUT: ONE verified contact per company in `contacts` (`full_name`,
-  `role` = actual title, `role_type` = `decision-maker` | `champion`,
-  `linkedin_url`, `source` = which rung found it), `committee_status` →
-  `done | not_found | failed`, `targeting_plan` persisted in
-  `memory/state.json`.
-
-*Phase 0 — the targeting doctrine (once per workspace, user-confirmed).*
-Derived from offer + ICP + personas, presented in 5-6 lines, confirmed
-by the user BEFORE any hunting, then persisted and reused silently on
-re-runs (re-asked only if context/ changes):
-
-| Company size | Target type | Why |
-|---|---|---|
-| ≲ 20 employees | decision-maker (founder/gérant/CEO) | no real champion exists in a 10-person shop — aim at the nerve |
-| mid-size | decision-maker of the buying function | title patterns from the ICP (head of purchasing, head of sales…) |
-| large + expensive/complex offer | CHAMPION first | the operational believer sells internally; personas say who |
-
-One target type per company — never both. The plan also fixes the title
-patterns per type (in the company's language) and the fallback rule:
-`none` (strict, default) or `other_type` (take the other role, labeled).
-
-*Phase 1 — the waterfall (per company, cheapest first, stop at first
-VERIFIED hit).*
-
-| Rung | Source | Cost | Skipped when |
+| Source | Moves via | Mode | Rides context? |
 |---|---|---|---|
-| A | registry relay — the human in `executives` | free, instant | target ≠ decision-maker, company not small, or officer is a company (`parent_company` set → group noted) |
-| B | FullEnrich people search (title patterns + domain) | free — searches cost no credits | FullEnrich not connected |
-| C | LinkedIn via Bright Data SERP — `site:linkedin.com/in "<title>" "<company>"`, indexed snippets only, never logged in | ~1 credit, max 2 queries | Bright Data not connected |
-| D | team/about page scrape | ~1 credit | — |
-
-Verification rule at every rung: name + role + company must cohere IN
-THE SOURCE ITSELF; ambiguity → next rung; nothing after D → fallback
-rule, else `not_found`. Never an invented or unverified person. Writes
-happen immediately per company via db.py; dedup on
-(company_id + full_name). Volume mode (>10 companies): subagents run
-rungs B-D in parallel batches → staging JSONL → main thread verifies →
-db.py commits; SERP credits announced first (§8).
-
-*Test protocol (validated fields on the tech-startups workspace):*
-0. `relance enrich-firmographics` first if the table predates the
-   contract columns.
-1. "trouve les bons contacts pour mes entreprises" → the PLAN must be
-   presented and await confirmation (hunting before OK = fail).
-2. Rung A: ~6 small companies → instant free contacts from the registry
-   (`source=registry`, `role_type=decision-maker`).
-3. The hard case (Predictice): president is a holding (FORSETI) →
-   registry skipped WITH the group noted → human CEO found via B/C with
-   `linkedin_url` and announced credit.
-4. Champion path: add a 100+ employee company (e.g. doctrine.fr) → plan
-   routes to `role_type=champion` with an operational title.
-5. Negative: a fictitious company → cascade exhausted →
-   `not_found`, zero invention (the refusal IS the success).
-6. Idempotence: re-run → done rows untouched, plan reused without
-   re-asking.
-Success checklist: one contact per company · role_type matches the plan
-· every contact traced to its rung · credits announced before spending ·
-receipts only in the conversation.
-
-**enrich-person-profile** ✅ (0.4.0 — strategy revised after live tests)
-- IN: `contacts` with `full_name` + a resolvable company (name/domain
-  hints; an existing `linkedin_url` upgrades the lookup),
-  `profile_status='pending'`.
-- OUT: `role`, `seniority`, `linkedin_url`, `profile_source`;
-  `profile_status` → `done | not_found | failed`.
-- Strategy: verified waterfall, cheap first. Rung A — FullEnrich people
-  search: FREE (0 credits, live-verified) and returns title, seniority,
-  linkedin_url and dated job history — the "FullEnrich = only
-  email/phone" belief was wrong: that is the paid *enrich* side, not
-  *search*. Rung B — LinkedIn SERP via Bright Data, indexed snippets
-  only (~1 credit; profile pages sit behind the login wall — confirmed,
-  never scraped). Rung C — team/press pages. Optional structured rung:
-  `web_data_linkedin_person_profile` (pro mode) when the URL is known
-  but the title still missing. Name + role + company must cohere in the
-  source; `not_found` over guessing. Completes imported/CRM contacts
-  that enrich-buying-committee never touched. 0.4.1 field patches:
-  rung B opt-in on low-presence segments (no domain + tiny/artisan),
-  French legal titles → C-Level over provider labels, kill flags in
-  memory/ excluded from scope, receipt suggestions instead of row
-  creation, one upfront paid-budget confirmation per run. 0.4.2:
-  `left_company=1` rows out of scope; the verification rule has
-  primacy over any relay — a title observed at another company than
-  the row's is never written.
-
-**signal-person** ✅ (0.4.0 — new brick, person-level twin of signal-sillage)
-- IN: contacts with `linkedin_url` (+ a resolvable company for
-  hiring/news); scope = tier A/B once score exists, else
-  user-confirmed; re-scan window: `signal_status='pending'` or
-  `signal_checked_at` > 7 days.
-- OUT: `signals` rows (`kind` = `job_change | new_post | hiring |
-  company_news`, summary + `evidence_url` + date + `freshness` =
-  `fresh` ≤60d | `context`, append-only, dedup on `sig_key`) +
-  `contacts.last_signal` / `signal_status` / `signal_checked_at`. A
-  PROMOTION resets the contact's `profile_status='pending'` (bus relay
-  to enrich-person-profile); a company CHANGE sets `left_company=1`
-  instead — row frozen, excluded from person-profile and
-  write-outreach scopes, following the person is the user's call
-  (0.4.2, field-tested on the Julia Levy fixture).
-- Strategy: four announced passes, cheap first — job changes via FREE
-  FullEnrich re-search (returned current employment vs stored columns;
-  promotions count); recent posts via `web_data_linkedin_posts`
-  (per-record, cap 25/run, money gate §8); hiring via `tools/jobs.py
-  check` (0.6.0 — free trade sweep + name check + career-page probe,
-  agencies pre-flagged; Bright Data escalation for ATS/LinkedIn-only
-  companies, cap 25 — often the strongest intent signal of the four);
-  company news via `tools/news.py` (0.7.0 — Google News RSS, free,
-  last-month window, distress `warning` flag; LLM judges homonyms;
-  SERP escalation only for quiet tier-A accounts). A signal without a source
-  URL/record does not exist; only FRESH (≤60 days) signals are
-  icebreaker material. On-demand today; scheduled `claude -p` cadence
-  next; real-time = cockpit V2. Prospect *comments* stay out of reach
-  without a logged-in account — deliberately renounced (doctrine:
-  never log in).
-
-**find-hiring-signal** ✅ (0.5.0 — new brick: hiring as a sourcing engine)
-- IN: `context/offer.md` + `icp.md` (HARD gate — the pain matrix
-  derives from them) + Bright Data; confirmed `hiring_matrix`
-  persisted in `memory/state.json`, reused silently.
-- OUT: `companies` rows (`source='hiring-signal'`, verified domain,
-  `hiring_score` 0-100, `hiring_angle` ready for write-outreach) + one
-  `signals` row per company (`kind='hiring'`, freshness, evidence
-  URL); raw offers + rejects in `staging/hiring-<date>/`.
-- Strategy: you are not searching job ads — you are searching
-  companies that just revealed a business priority in public.
-  User-confirmed pain matrix (titles × tools × pains × geo; one GTM
-  hypothesis per query, never "startup jobs France") → batched SERP
-  over ATS-direct (greenhouse/lever/ashby/workable/teamtailor/WTTJ),
-  LinkedIn Jobs, Indeed, France Travail + HelloWork for SMB ICPs →
-  offers scraped and extracted to staging, filtered (≤60 days, real
-  employer, no agencies/stage, CNIL company-level only) → grouped by
-  company, signal score /100 (recency 20, category fit 25, tool 15,
-  pain wording 15, volume 15, size 10) → user confirms the cut
-  (default ≥70) → committed with the angle as contextual proof, never
-  "j'ai vu que vous recrutez". Future upgrade to evaluate: France
-  Travail official API + La Bonne Boîte (exhaustive per-SIRET
-  coverage, free key). 0.5.1 field patches: single GO per run,
-  1-credit health control + free-channel fallback, negative keywords,
-  `sig_key` fix, batched commits.
-
-**tools/jobs.py** ✅ (0.6.0 — the deterministic hunt engine)
-- IN: hunt mode — the confirmed `hiring_matrix` JSON; check mode — a
-  companies batch (`company_id`, name, domain, location) +
-  `--keywords` trade terms swept ONCE for the whole batch (France
-  Travail matches employer names poorly; the trade sweep is what
-  finds them).
-- OUT (staging only — never touches bricks.db): `offers.jsonl`
-  (pre-extracted, prescore ≤ 65: recency/tools/pains/volume),
-  `rejected.jsonl` (agencies, stage, expired, anonymous — with
-  reasons, recoverable), `companies.jsonl` (grouped with volume
-  bonus, or per-company `hiring`/`quiet` verdicts), `summary.json`
-  (the receipt: counts, caps, errors, spend=0).
-- Strategy: firmo.py doctrine — deterministic script, no LLM in the
-  loop. Polite stdlib fetches (0.8 s rate, browser UA, one retry):
-  France Travail search cards + detail microdata (datePosted,
-  hiringOrganization, validThrough), HelloWork cards (aria-label
-  carries title/city/company/contract), career-page probe on known
-  domains (≤ 3 fetches); word-boundary agency filter (~40 interim
-  brands + the "recrute pour" formula). Live-validated on day one:
-  reproduced the manual Gironde hunt (104 raw → 34 kept, 24+ agencies
-  flagged, MORICEAU's double offer caught by the volume bonus) and
-  the afternoon hiring pass (AMB career page + MORICEAU via trade
-  sweep) — seconds, 0 credits. The skills call it FIRST; SERP/Bright
-  Data are the escalation for ATS/LinkedIn lanes.
-
-**tools/news.py** ✅ (0.7.0 — the company-news engine)
-- IN: a companies batch (`company_id`, name) + `--days` window +
-  optional `--terms` (offer vocabulary).
-- OUT (staging only): `news.jsonl` (dated items, outlet, URL,
-  `term_hits`, `name_in_title`, `warning` on distress vocabulary —
-  redressement/liquidation feed the kill gate, never an icebreaker),
-  per-company `news`/`quiet` verdicts, `summary.json`.
-- Strategy: Google News RSS (free, no key, FR edition), one fetch per
-  company, legal-form suffixes stripped from the query phrase. The
-  script filters by date and vocabulary mechanically; the LLM judges
-  relevance (homonyms). Live-validated: SOPREMA → 5 dated articles in
-  45 days ("CA record" caught by `croissance`), 123 older items
-  dropped, no-press artisans honestly QUIET. signal-person pass 4
-  calls it first; SERP only for quiet tier-A accounts.
-
-**find-company-people** ✅ (0.8.0 — spec by Rémi, user-requested; built by Robin)
-- IN: `companies` rows already in the DB (`domain` ideally),
-  `people_status='pending'`, `status != 'disqualified'` + a role/title
-  pattern (from the user or `context/icp.md` Buying roles / `personas/`).
-- OUT: MULTIPLE `contacts` rows per company — `company_id`, `full_name`,
-  `role`, `linkedin_url`, `email` (optional), `source` — deduped on
-  (company_id + full_name/email); `companies.people_status` →
-  `done | not_found | failed`. Optional per-company cap on N.
-- Strategy: the "expand one company into its roster" brick — deliberately
-  the OPPOSITE end from enrich-buying-committee. Where buying-committee
-  returns ONE opinionated target per the plan, find-company-people returns
-  the full matching SET when the user wants breadth (multi-threading,
-  several stakeholders). Cost-ordered like the committee waterfall but
-  without the "stop at first hit": FullEnrich people search (free) for the
-  title pattern + domain → LinkedIn SERP via Bright Data
-  (`site:linkedin.com/in "<title>" "<company>"`, indexed snippets only,
-  never logged in, ~1 credit/query, capped) → team/about page scrape.
-  Announce the volume (N companies × cap) under the money gate §8 before
-  spending. Verify name + role + company cohere in the source; unverifiable
-  → skip, never invent. Feeds enrich-person-profile (roster → per-person
-  enrichment) and write-outreach. Boundary is explicit so Claude never
-  confuses the two: committee = pick THE contact; find-company-people =
-  list ALL matching contacts. 0.8.0 implementation notes: ONE GO per
-  run (pattern + cap [default 4] + scope + worst-case budget in a
-  single confirmation); masked-name rule — FullEnrich-masked last
-  names ("Hakim A.") are never inserted, resolved via rungs B/C or
-  receipt-mentioned only; thin rows get `profile_status='pending'`
-  (bus relay to enrich-person-profile); the committee's `role_type`
-  is never touched; kill-flagged companies never claimed.
-
-**plan-outreach** ✅ (0.9.0 — the strategy brick)
-- IN: HARD gate `offer.md` + `icp.md` + `personas/`; EVIDENCE from the
-  base (firmo columns, `tier` distribution — absent → uniform-degraded
-  and stated, signal freshness, contact coverage: % linkedin_url,
-  % verified emails, seniority mix) + 3 facts folded into the single
-  GO (deal size, maturity pre-PMF/first-100/scaling, existing
-  audience).
-- OUT: `context/strategy.md` (motion, channel mix, cadence/volumes,
-  per-tier treatment A hot-manual / B standard / C light, sequence
-  templates per lane, the evidence behind each choice, date —
-  user-confirmed once, persisted, re-proposed only on material
-  change) + `contacts.channel_plan` = `email` | `linkedin` |
-  `linkedin+email` | `hot-manual`, per row, evidence-based.
-- Strategy: the team's 2026 GTM corpus distilled into a decision
-  doctrine (pre-PMF → LinkedIn validation · first-100 → founder
-  outbound, one channel deep · high-ticket → hot/ABM manual · high
-  LinkedIn coverage → authority + invite→email · education market →
-  content + warm email · existing audience → media system · PLG →
-  bottom-up · physical → omnichannel). LinkedIn+email is the B2B
-  default; email-only when the evidence says so (artisan ICPs). Runs
-  AFTER enrichment/score — evidence, never vibes. Never writes a
-  message: write-outreach executes, the orchestrator sequences.
-
-**playbook-outbound** ✅ (0.9.0 — the deterministic orchestrator of the motion)
-- IN: a workspace with context filled (TODO → dispatches gtm-onboard
-  first) + ONE chain GO (per-phase counts, worst-case budgets, the 3
-  strategy facts).
-- OUT: the pipeline's artifacts, each written by its own brick;
-  resumable phase log in `memory/state.json`.
-- Strategy: explicit dispatch, fixed order — evidence (firmo →
-  committee or roster → profiles) → score (kill gate + tiers;
-  degrades gracefully if absent) → free signal passes → plan-outreach
-  → write-outreach → human hand-over (approve email drafts,
-  copy-paste LinkedIn ones). Runtime discovery of installed bricks;
-  the only legitimate mid-chain stops are a strategy CONTRADICTION at
-  the plan phase or an unplanned cost. This answers "who is the
-  orchestrator?": the session auto-delegates for exploration; THIS
-  playbook is the trusted, rerunnable version (CLAUDE.md dispatch
-  doctrine).
-
-**signal-sillage**
-- IN: qualified accounts (tier A/B once scoring exists).
-- OUT: signal rows + companies flagged "wake up" for re-score/sequence.
-- Strategy: step zero is the access spike (account, API key, docs). Then
-  `sync` pushes the account list; `ingest` polls on demand or via a cron
-  `claude -p` run (real-time webhook = cockpit, V2). Demo plan B: simulated
-  signals in fixtures, clearly labeled. Person-level LinkedIn signals
-  are already covered by signal-person (0.4.0) — this brick stays
-  account-level.
-
-### To build — Rémi (data out)
-
-**onboard**
-- IN: a conversation with the user (+ won customers when crm-import
-  exists).
-- OUT: filled `context/offer.md`, `icp.md`, `personas/*.md` and
-  `scoring.yaml` (weights + kill rules).
-- Strategy: interview, then propose — the agent drafts, the user validates.
-  When seed customers exist, derive the ICP from facts (what the winners
-  share) rather than declarations. Writes files, not database rows: this is
-  the one brick whose OUT is the context itself.
-
-**score-kill-gate + score-icp-fit**
-- IN: cheap enriched columns + `context/scoring.yaml`.
-- OUT: kill gate → `status='disqualified'` (early-stop: no brick ever
-  spends on these again); icp-fit → `score` 0-100, `tier` A/B/C, `reasons`.
-- Strategy: the agent writes the rules once (onboard), a deterministic
-  pass applies them — same input, same score, explainable to a jury.
-  Kill gate runs as early as columns allow (money gate's best friend);
-  scoring re-runs free after every enrichment wave. Implementation
-  note (0.7.0): ship the deterministic pass as `tools/score.py`
-  reading `scoring.yaml` — the firmo/jobs/news pattern, proven ×3:
-  script applies the rules, LLM only explains edge cases, db.py
-  commits. The `signals` table (freshness, distress `warning`) is
-  scoring input too.
-
-**crm-import**
-- IN: a CRM credential/URL/export (HubSpot `pat-…`, Notion `ntn_…`,
-  Salesforce org, Pipedrive, or CSV).
-- OUT: won customers as `companies` rows with `segment='seed'`,
-  `source=<crm>`.
-- Strategy: detect the system from the credential shape; one thin connector
-  per CRM (HubSpot and Notion have official MCPs — start there), all
-  writing the same seed rows. CSV works today as the universal fallback.
-  This brick is what makes find-lookalike CRM-agnostic.
-
-**crm-push**
-- IN: qualified rows (scored, or replied once outreach exists).
-- OUT: account + contact (+ deal) created in the user's CRM, `crm_id`
-  written back.
-- Strategy: same connector layer as crm-import, reversed. Dedup against
-  the CRM before creating (domain normalization), never create twice —
-  `crm_id` present = skip.
-
-**outreach-send** (+ send-guard hook + permission allowlist)
-- IN: `messages` with `status='approved'` ONLY + mailbox credentials +
-  quotas.
-- OUT: `status='sent'`, send timestamps; bounces flagged.
-- Strategy: sending is code, not judgment — a throttled deterministic
-  sender (quotas per mailbox, spacing, send windows). A PreToolUse hook
-  BLOCKS any send of a non-approved message mechanically — the guarantee
-  is enforced, not promised. Ship the workspace permission allowlist in
-  workspace.py scaffolding at the same time (no more permission popups on
-  fresh workspaces).
+| French company registry | `firmo.py` → staging → db | A | no |
+| Job boards / career pages | `jobs.py` → staging → db | A | no |
+| Company news (RSS) | `news.py` → staging → db | A | no |
+| FullEnrich roster search (volume) | `fetchers/fullenrich_people.py` via runner | A/C | no |
+| FullEnrich emails/phones (bulk) | `enrich_bulk` → `export_*` CSV → import | A | no |
+| FullEnrich search (preview ≤10) | MCP, in session | B | yes (capped) |
+| Bright Data page (one site, judged) | MCP, in session | B | yes |
+| Bright Data pages (per-row, volume) | `researcher.py --tools web` (engine) | C | no (disposable) |
+| Model-generated content (drafts, scores) | session or engine workers | B/C | it IS the output |
 
 ---
 
-## 5. Milestones
+## 5. The complete brick catalog (23 skills)
+
+Every capability is one `skills/<name>/SKILL.md`; its precise contract lives
+in that skill's `BRICK.md`. Format below: **IN → what it does → OUT · [mode]**.
+
+### Entry & workspace
+
+**gtm-onboard** · IN: a vague first GTM ask ("je vends X à Y", or nothing).
+→ Infers a falsifiable v1 ICP (infers first, questions only what it can't),
+routes to `context-write` (+ `workspace` for a new project). → OUT:
+`context/icp.md` + `offer.md` populated, workspace ready. · [B]
+
+**context-write** · IN: one free-text ICP sentence (from onboard). → Parses
+it into the exact ICP schema, updates without wiping existing fields. →
+OUT: `context/icp.md`. Never called directly. · [B]
+
+**workspace** · IN: a name/goal, or nothing (auto-resolution). →
+`workspace.py` scaffolds `bricks/workspaces/<name>/` (context/, bricks.db,
+staging/, memory/), sets the current workspace, shows the banner. → OUT: a
+sealed per-client world. · [A]
+
+**interface** · IN: nothing. → Launches `front/server.py` (local web UI over
+the workspace DB; ⚙ button manages the engine's API keys in `~/.bricks/env`).
+→ OUT: a clickable URL, live Clay-style table. · [A]
+
+### Find — sourcing NEW companies / contacts
+
+**find** · IN: an ICP / criteria. → FullEnrich search preview (10 + total
+count) → CSV export at volume; Bright Data or built-in web for niche/local
+commerce. → OUT: `companies` (or `contacts`) rows, deduped on domain/email.
+· [B + A export]
+
+**find-directory-scrape** · IN: a directory / exhibitor / listicle URL. →
+Bright Data scrapes the listing pages (JS + anti-bot handled), extracts
+entities, verifies live domains. → OUT: `companies` rows,
+`source=directory:<host>`. · [B, sponge subagents at volume]
+
+**find-lookalike** · IN: seed companies (`segment='seed'`, fed by CRM export
+/ CSV / dictated list). → Reads what the winners share, sources similar
+companies on the discriminating signal. → OUT: `companies`,
+`source=lookalike:<seed>`. · [B]
+
+**find-hiring-signal** · IN: offer + ICP compiled into a pain matrix. →
+`jobs.py hunt` sweeps France Travail / HelloWork / career pages (free,
+deterministic, agencies filtered, prescored /65); SERP escalation only for
+ATS/LinkedIn lanes; judgement adds the /100 and the cut. → OUT: `companies`
+(score ≥ 70) + one `signals` row each with a ready outreach angle. · [A
+engine + B judgement]
+
+**find-company-people** · IN: `companies` + a title pattern. → The roster
+expander (MULTIPLE contacts/company, no stop-at-first-hit). At volume:
+`runner.py --action fetch --fetcher fullenrich_people` — the FullEnrich HTTP
+API in the loop, with a STRICT-SYNONYM title-wave cascade (rename the
+person, never widen who is hunted: GTM engineer ≠ SDR), verified & unmasked
+only. Session sweep is the no-key fallback. → OUT: several `contacts` per
+company, deduped on `person_key`, thin rows relayed to person-profile. · [C
+engine / B fallback]
+
+### Enrich — fill columns on existing rows
+
+**enrich** · IN: a table + which column + which source. → Contact/firmo data
+via FullEnrich (`enrich_bulk` → CSV import at volume); web-content via
+Bright Data (`scrape_batch`, §9 waves). → OUT: the column + its `X_status`.
+· [B + A export, waves]
+
+**enrich-firmographics** · IN: `companies` (name + locality hint). →
+`firmo.py` batch-queries the official French API (free, 7 req/s, parallel
+workers); Bright Data only disambiguates via legal pages. → OUT:
+`employees, industry, naf, siren, city, executives, parent_company`. · [A]
+
+**enrich-buying-committee** · IN: enriched `companies`. → Picks ONE target
+type (decision-maker vs champion) from the ICP once, then a cheap-first
+waterfall (registry → FullEnrich search → LinkedIn SERP → team page),
+verified always, ONE person per company. → OUT: one `contacts` row/company
+with `role_type`. · [B, waves/sponge at volume]
+
+**enrich-person-profile** · IN: `contacts` missing identity (CRM/CSV
+imports, manual adds). → Free-first waterfall (FullEnrich search → LinkedIn
+SERP → team page), verified in-source or `not_found`, never guesses. → OUT:
+`role, seniority, linkedin_url`. · [B, waves]
+
+**web-researcher** · IN: ANY per-row question ("ont-ils un configurateur en
+ligne ?", "trouve le tél du standard", "quelle forme juridique ?"). →
+Compiles the question into `prompts/<slug>/instructions.md` ({{column}}
+variables) + `schema.json` (fields → columns), then THE ENGINE runs one
+disposable agent per row (web-connected `--tools web` or pure judgement
+`--tools none`); preview 10 → GO → mass. → OUT: one or several new columns
+(structured, Clay-style), each with evidence + status. · [C]
+
+### Signals
+
+**signal-person** · IN: known `contacts` (need `linkedin_url` / a resolvable
+company). → Four cheap-first passes: job change (FullEnrich search, free),
+recent posts (Bright Data, per-record), hiring (`jobs.py check`, free),
+company news (`news.py`, free). → OUT: dated, evidence-backed `signals` rows
+(`kind`, `freshness`, `evidence_url`); job-moves freeze the contact. · [A
+engine + B judgement]
+
+### Transform & score
+
+**transform** · IN: an existing table + an instruction (dedupe, filter,
+derive, split, merge, clean). → Deterministic rules first (SQL-able via
+`db.py`); prefers new columns over destroyed data; kills via
+`status='disqualified'`, never deletes silently. → OUT: modified/derived
+rows or tables. · [B decides, A executes]
+
+**score** · IN: rows + natural-language scoring rules. → Compiles rules into
+`spec.json` ONCE; `materialize.py` judges the fuzzy measures in parallel
+headless agents (checkpointed, never re-judged); `score.py` computes the
+total purely. File-based — never touches the DB until a separate commit
+step. → OUT: `score`, `tier`, `sc_*` decomposition, `killed` + reason. · [A
+kernel + C judges]
+
+### Answer (no DB write)
+
+**scan-mentions** · IN: a question about ONE company's site ("ont-ils des
+clients dans la banque ?"). → Bright Data scans the site, answers directly
+in the chat backed by evidence. → OUT: a short paragraph — no row written.
+· [B]
+
+### Strategy & write
+
+**plan-outreach** · IN: enriched + scored base + phase-0 facts (deal size,
+maturity, audience). → Reads the evidence and decides motion / channel mix
+(LinkedIn / email / both) / cadence / per-tier treatment. → OUT:
+`context/strategy.md` (user-confirmed) + `contacts.channel_plan`. · [B]
+
+**write-outreach** · IN: `strategy.md` + each contact's persona + `voice.md`
++ fresh signals. → CPPC copywriting < 100 words, one question per message,
+per `channel_plan`, in the contact's language; drafts only, never sends. →
+OUT: `messages` rows (`status='draft'`). · [B]
+
+### Playbooks — orchestrators (explicit dispatch, no re-deciding)
+
+**playbook-outbound** · IN: a workspace. → Chains the bricks in fixed order
+— complete evidence (enrich) → score → signals → plan-outreach →
+write-outreach — with guards between phases and ONE chain GO; stops where
+approval is human. → OUT: the whole base advanced, final receipt. · [orch]
+
+**playbook-lookalike** · IN: best customers (CRM export / CSV / dictated).
+→ Import seeds → enrich them with every available brick → find what the
+winners share → source & filter similar companies on the discriminating
+signal. → OUT: a lookalike prospect list. · [orch]
+
+### Extra
+
+**create-landing-page** · IN: workspace context (offer / ICP / personas). →
+Generates a premium single-file HTML landing page from the context (no
+interview), deploys it to Vercel via GitHub on a generic domain. → OUT: a
+live URL. · [B + scripts]
+
+
+---
+
+## 6. Milestones
 
 1. ~~Retest pass~~ — DONE: two field campaigns validated end to end
    (tech-startups, relance-devis-habitat), five product versions shipped
    from their findings.
-2. **Score (kill gate + icp-fit) — THE next brick.** Kill rules are
-   currently flagged everywhere but enforced nowhere; this brick turns
-   them into the early-stop demo moment ("it stops spending on its
-   own") and produces the tiers that prioritize emails, sequences and
-   signal-person's paid passes.
-   Rémi's per the split — Robin takes it if Rémi is still under water.
-   **Onboard** (Rémi) upgrades the context-in-a-prompt into the guided
-   interview.
+2. ~~Score (kill gate + icp-fit)~~ — DONE (shipped: deterministic kernel
+   + headless judges, tiers, kill → `disqualified`). ~~Onboard~~ — DONE
+   (gtm-onboard, guided interview). ~~THE ENGINE~~ — DONE (runner +
+   researcher + web-researcher + find-company-people fetch lane). Next
+   real work: fold the formal score brick into playbook-outbound's loop,
+   and field-run the engine's web lane at volume.
 3. **Full pipeline demo** on a real ICP: find → enrich → kill/score →
    contacts → emails → sequences, the table telling the story live.
    **First full run achieved 2026-07-06** (relance-devis-habitat:

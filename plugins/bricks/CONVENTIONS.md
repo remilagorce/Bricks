@@ -138,7 +138,9 @@ Tables and columns are dynamic, Clay-style — `add` creates the table on
 first use, `add`/`modify` create missing columns on the fly:
 
 Every command below takes `--db <absolute path to bricks.db>` (omitted from
-the examples for readability — never omit it in a real call).
+the examples for readability — never omit it in a real call). `--db` may be
+placed BEFORE or AFTER the subcommand — both `db.py --db X add companies …`
+and `db.py add companies … --db X` are accepted.
 
 ```bash
 # Insert rows (creates table/columns as needed); --key dedups on a column
@@ -387,7 +389,7 @@ python3 "${CLAUDE_PLUGIN_ROOT}/tools/runner.py" run \
   --run-id cap-<date> --preview 10
 
 # The mass (tranches of --limit, resumable, idempotent)
-...same command with --commit [--limit 500] [--workers 8]
+...same command with --commit [--limit 500] [--workers 12]
 
 # Deterministic fill (zero model), undo, crash recovery
 ... --action set --set segment=artisan --run-id seg-1 --commit
@@ -419,9 +421,44 @@ Iron facts, enforced by the engine itself:
   idempotence and the never-pay-twice rule; there is no side ledger.
 - **One agent = one row**: the agent's context holds its row and its
   pages, nothing else. Volume changes the DURATION of a run, never the
-  size of any context. `--workers` is hard-capped (~10): parallel
-  agents, not parallel thousands; 10 000 web rows ≈ an overnight run —
-  announce it.
+  size of any context. `--workers` is hard-capped (default 12, max 50) —
+  but the USABLE number depends on the worker (below), NOT on the row
+  count: pick a fixed value near the ceiling and let all rows flow
+  through it in waves, whatever the total. More workers = the same tokens,
+  just less wall time — raise it to the ceiling, then watch the receipt's
+  `failed` for the collapse.
+- **Which worker for which lane** (measured 2026-07, not guessed):
+  - `claude -p` (default, subscription, no API cap) is a HEAVY local CLI
+    with a ~10-20s cold-start → LOCAL-CPU-bound. Usable `--workers` ≈
+    12-16 on a laptop; ~50 oversubscribes and every worker times out
+    (proven: 0 done). Best for big `--tools web` volume when you want $0
+    API and don't mind ~1h.
+  - `worker_api.py` (`BRICKS_WORKER_CMD`, Anthropic API, credits) is
+    LIGHT — the agent loop + MCP browsing run server-side, so locally
+    it's one lean HTTP call. Holds ~30+ workers where `claude -p` dies,
+    ~2.8× faster wall. Its true home is `--tools none` (tiny cost, pure
+    cold-start win) and speed-critical web batches — but the web lane
+    burns API credits fast and WILL hit usage caps; watch spend.
+  - Cross-cutting: yes/no web questions → `--max-pages 1-2` (cheaper,
+    faster, fewer context overflows). Agent workers default to `haiku`;
+    pass `--model sonnet` for reasoning or for pages that overflow
+    haiku's 200k context.
+- **A calibrated single shot beats the escalation ladder** (measured across
+  6 A/B runs — do NOT reach for a multi-rung timeout ladder). The ladder
+  (fast first rung, re-run only the failures at a higher timeout) LOSES on
+  both workers: on `claude -p` the cold-start means no rung is ever cheap;
+  on `worker_api` there is no fixed per-row cost to amortize, so splitting
+  only STACKS timeouts on the slow rows (a row that times out at rung 1 AND
+  rung 2 burned both, where one wide shot would have finished it). Do this
+  instead: ONE shot at a timeout CALIBRATED to the batch — the timeout is
+  the one knob you can't guess (it depends on the sites), so measure it on a
+  small sample (~60-90s for a 3-page web question). THEN, only if
+  `<base>_error` shows `too long` overflows (a giant page busts haiku's 200k
+  context), ONE targeted recovery pass on those rows —
+  `--retry-failed --where "<base>_error LIKE '%too long%'" --model sonnet`
+  (1M context). That model-bump recovery is the one piece of the
+  route-by-cause idea that pays; the timeout ladder is not. `--no-retry-timeout`
+  and `--where` stay in the engine for that recovery pass.
 - **Template variables are validated against the table's columns BEFORE
   anything is claimed or spent**; a row with an empty variable fails
   alone (`<base>_error` says why), never the run.
@@ -446,6 +483,20 @@ Iron facts, enforced by the engine itself:
   `python3 "${CLAUDE_PLUGIN_ROOT}/tools/envfile.py" set KEY VALUE`
   and re-run. The front's ⚙ settings panel reads/writes the same file
   (`/api/settings`, values always masked to their last 4 chars —
-  `envfile.py status` shows the same).
+  `envfile.py status` shows the same). `set` REJECTS a value containing
+  whitespace or shorter than 8 chars — a token is one opaque string, and
+  field-testing caught a whole dictated sentence pasted into
+  `BRIGHTDATA_API_TOKEN`, silently returning empty results for a run.
+- **Session MCP tokens vs engine tokens are separate lanes.** The
+  engine reads `~/.bricks/env` directly (always fresh). The session's
+  own `mcp__brightdata__*` / `mcp__fullenrich__*` tools get their token
+  from `.mcp.json`'s `${BRIGHTDATA_API_TOKEN}`, expanded from the APP's
+  environment at launch — and a macOS app started from Finder sees
+  neither the shell profile nor `~/.bricks/env`, so that token is empty
+  and the session's DIRECT Bright Data calls return blank. Fix on
+  desktop: publish it to the GUI environment
+  (`launchctl setenv BRIGHTDATA_API_TOKEN …`, e.g. a login LaunchAgent
+  that reads `~/.bricks/env`), then relaunch the app. The ENGINE lane is
+  unaffected either way — prefer it at volume.
 - researcher.py has ONE caller: runner.py. A skill never spawns workers
   itself; a handful of rows (≲5) is handled in-session instead (§10).

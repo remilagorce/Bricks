@@ -128,7 +128,18 @@ def set_key(key: str, value: str) -> dict:
         raise ValueError(f"unknown key {key!r} — known: "
                          f"{[e['key'] for e in KNOWN_KEYS]}")
     if not value or "REMPLACE" in value:
-        raise ValueError("empty value")
+        raise ValueError("valeur vide")
+    # A key/token is a single opaque string. Whitespace means the user
+    # pasted prose or a dictation by mistake (field-tested: a whole French
+    # sentence landed in BRIGHTDATA_API_TOKEN and silently broke the run).
+    if any(c.isspace() for c in value):
+        raise ValueError("cette valeur contient un espace ou un retour à la "
+                         "ligne — ce n'est pas une clé/token. Tu as peut-être "
+                         "collé du texte au lieu de la clé. Recopie UNIQUEMENT "
+                         "la clé.")
+    if len(value) < 8:
+        raise ValueError(f"valeur trop courte ({len(value)} caractères) pour "
+                         "une clé/token — vérifie que tu as tout collé.")
     path = env_path()
     os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
     try:

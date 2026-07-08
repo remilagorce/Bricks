@@ -66,8 +66,9 @@ import researcher  # noqa: E402
 
 VAR_RE = re.compile(r"\{\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\}")
 TECH_SUFFIXES = ("_status", "_run", "_error", "_evidence")
-DEFAULT_WORKERS = 8
-MAX_WORKERS = 10
+DEFAULT_WORKERS = 12
+MAX_WORKERS = 50
+DEFAULT_AGENT_MODEL = "haiku"
 DEFAULT_TRANCHE = 500
 
 
@@ -206,7 +207,8 @@ def process_tranche(args, rows: list[dict], schema: dict | None,
             return {"status": "failed", "fields": {}, "error": str(exc)}
         try:
             return researcher.research(merged, schema, args.tools, args.model,
-                                       args.max_pages, args.timeout)
+                                       args.max_pages, args.timeout,
+                                       retry_on_timeout=not args.no_retry_timeout)
         except researcher.ResearchError as exc:
             return {"status": "failed", "fields": {}, "error": str(exc)}
 
@@ -288,6 +290,14 @@ def run(args) -> dict:
         if collisions:
             raise RunnerError(f"schema field(s) collide with bookkeeping "
                               f"columns: {collisions}")
+        # Uniform per-row extraction/judgment defaults to the fast model
+        # (CONVENTIONS §11): the strong model is reserved for orchestration,
+        # not for 500 identical worker turns. A skill needing more reasoning
+        # passes --model explicitly to override.
+        if not args.model:
+            args.model = DEFAULT_AGENT_MODEL
+            log(f"[runner] worker model defaulted to {DEFAULT_AGENT_MODEL} "
+                f"— pass --model to override")
     elif args.action == "fetch":
         if not args.fetcher or not args.params or not args.out_table:
             raise RunnerError("--action fetch needs --fetcher, --params "
@@ -434,6 +444,11 @@ def main(argv=None) -> int:
     p.add_argument("--model", default=None, help="worker model (e.g. haiku)")
     p.add_argument("--max-pages", type=int, default=researcher.DEFAULT_MAX_PAGES)
     p.add_argument("--timeout", type=int, default=researcher.DEFAULT_TIMEOUT)
+    p.add_argument("--no-retry-timeout", action="store_true",
+                   help="fail a timed-out row on the first attempt instead of "
+                        "retrying it at the same timeout — the cheap first rung "
+                        "of an escalation ladder (re-run failures with a higher "
+                        "--timeout via --retry-failed --where)")
     p.add_argument("--input-cols", default="all",
                    help="row data appended to the prompt: all|none|a,b "
                         "(default all)")

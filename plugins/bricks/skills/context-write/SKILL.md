@@ -1,6 +1,6 @@
 ---
 name: context-write
-description: Écrit ou met à jour un ICP dans le contexte workspace selon le schéma ICP. Appelé par gtm-onboard, jamais directement.
+description: Écrit ou met à jour l'ICP et les personas dans le contexte workspace selon les schémas. Appelé par gtm-onboard, jamais directement.
 user-invocable: false
 ---
 
@@ -8,10 +8,11 @@ user-invocable: false
 
 Takes one free-text sentence describing an ICP and writes it, structured,
 into the current workspace's `context/icp.md`, following the ICP schema
-verbatim. This is the one brick whose output is the context itself, not
-database rows: no `db.py`, no `bricks.db` — just the markdown file the
-other bricks read as their client brain. Called by `gtm-onboard`, never by
-the user directly.
+verbatim. When `gtm-onboard` also hands over a buying committee, it persists
+one persona file per role under `context/personas/`. This is the one brick
+whose output is the context itself, not database rows: no `db.py`, no
+`bricks.db` — just the markdown files the other bricks read as their client
+brain. Called by `gtm-onboard`, never by the user directly.
 
 ## Before anything: resolve the workspace
 
@@ -75,3 +76,22 @@ Mapping rules:
    unchanged.
 3. Report a 3–4 line receipt: which fields were filled, which remain `TODO`.
    Never paste the whole file back into the chat.
+
+## Personas — one file per buying role
+
+When `gtm-onboard` hands over a buying committee (more than the single
+decision-maker — a champion, an end user, a DG/office-manager layer), do
+NOT let it live only in the conversation: persist it, or the writing bricks
+never see it. For each identified role write
+`context/personas/<slug>.md` (slug from the role, e.g. `daf`,
+`chef-comptable`), following the shape of
+`templates/context/personas/decision-maker.md` verbatim (headings: *Who
+they are* / *What they care about* / *Objections* / *Angle that works* /
+*Style*). Fill each section from what onboarding surfaced; leave a section
+`TODO` rather than inventing it.
+
+Same update-not-wipe discipline as the ICP: read an existing persona file
+before overwriting, preserve filled sections. The buying roles line in
+`icp.md` and the persona files must agree — the ICP names the title
+patterns, the persona files carry the depth. Add the personas written to
+the receipt (one line: "personas persistés : DAF, chef comptable").

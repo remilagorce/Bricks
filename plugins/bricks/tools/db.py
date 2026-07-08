@@ -21,6 +21,8 @@ Design contract (see CONVENTIONS.md at the plugin root):
 
 Database resolution: `--db <path>` explicit, otherwise the current
 workspace's bricks.db (from ./bricks/config.json, override root with --root).
+`--db` / `--root` may be placed BEFORE or AFTER the subcommand — both
+`db.py --db X add …` and `db.py add … --db X` work.
 
 CLI (JSON on stdout; on error JSON on stderr + exit 1):
     python3 db.py init
@@ -653,13 +655,30 @@ def main(argv=None) -> int:
                         help="explicit path to a bricks.db (bypasses workspace resolution)")
     sub = parser.add_subparsers(dest="command", required=True)
 
-    sub.add_parser("init", help="create the database file if missing (WAL mode)")
-    sub.add_parser("tables", help="list tables with row counts and columns")
+    # `--db` / `--root` are global (declared on the top parser above), but a
+    # bare argparse subparser rejects them AFTER the subcommand — so
+    # `db.py add companies --rows … --db /path` fails while
+    # `db.py --db /path add companies …` works. The model reliably writes
+    # --db last (field-tested friction), so accept it in BOTH positions:
+    # every subparser inherits this flag group. Defaults are SUPPRESSED so
+    # that omitting the flag after the subcommand never clobbers a value
+    # given before it (the top-parser default already covers that case).
+    dbflags = argparse.ArgumentParser(add_help=False)
+    dbflags.add_argument("--root", default=argparse.SUPPRESS,
+                         help="Bricks data root (also accepted before the subcommand)")
+    dbflags.add_argument("--db", default=argparse.SUPPRESS,
+                         help="explicit bricks.db path (also accepted before the subcommand)")
 
-    p = sub.add_parser("schema", help="show a table's columns")
+    def add_cmd(name, **kw):
+        return sub.add_parser(name, parents=[dbflags], **kw)
+
+    add_cmd("init", help="create the database file if missing (WAL mode)")
+    add_cmd("tables", help="list tables with row counts and columns")
+
+    p = add_cmd("schema", help="show a table's columns")
     p.add_argument("table")
 
-    p = sub.add_parser("select", help="read rows (JSON objects)")
+    p = add_cmd("select", help="read rows (JSON objects)")
     p.add_argument("table")
     p.add_argument("--where", default=None, help="SQL condition, e.g. \"status='pending'\"")
     p.add_argument("--cols", default=None, help="comma-separated column names")
@@ -668,11 +687,11 @@ def main(argv=None) -> int:
     p.add_argument("--offset", type=int, default=0)
     p.add_argument("--order", default=None, help="ORDER BY clause, e.g. \"name ASC\"")
 
-    p = sub.add_parser("count", help="count rows")
+    p = add_cmd("count", help="count rows")
     p.add_argument("table")
     p.add_argument("--where", default=None)
 
-    p = sub.add_parser("claim", help="atomically select pending rows and mark them running")
+    p = add_cmd("claim", help="atomically select pending rows and mark them running")
     p.add_argument("table")
     p.add_argument("status_col", help="the X_status column to claim on")
     p.add_argument("--limit", type=int, default=25, help="max rows to claim (default 25)")
@@ -681,13 +700,13 @@ def main(argv=None) -> int:
     p.add_argument("--retry-failed", action="store_true",
                    help="also claim 'failed' rows (explicit retry)")
 
-    p = sub.add_parser("add", help="insert rows; creates table/columns as needed")
+    p = add_cmd("add", help="insert rows; creates table/columns as needed")
     p.add_argument("table")
     p.add_argument("--rows", required=True, help="JSON list of objects, or '-' for stdin")
     p.add_argument("--key", default=None,
                    help="dedup column: rows whose key value already exists are skipped")
 
-    p = sub.add_parser("modify", help="update cells by _id, or bulk --set with --where")
+    p = add_cmd("modify", help="update cells by _id, or bulk --set with --where")
     p.add_argument("table")
     p.add_argument("--updates", default=None,
                    help='JSON list of objects with an "_id" key, or \'-\' for stdin')
@@ -695,21 +714,21 @@ def main(argv=None) -> int:
                    help="bulk assignment (repeatable), requires --where")
     p.add_argument("--where", default=None)
 
-    p = sub.add_parser("remove", help="delete rows by _id list or by --where")
+    p = add_cmd("remove", help="delete rows by _id list or by --where")
     p.add_argument("table")
     p.add_argument("--ids", default=None, help="JSON list of _id values, or '-' for stdin")
     p.add_argument("--where", default=None)
 
-    p = sub.add_parser("drop-table", help="permanently delete a table and all its rows")
+    p = add_cmd("drop-table", help="permanently delete a table and all its rows")
     p.add_argument("table")
     p.add_argument("--confirm", action="store_true",
                    help="required acknowledgement — this cannot be undone")
 
-    p = sub.add_parser("drop-column", help="drop one column, preserving all other columns and rows")
+    p = add_cmd("drop-column", help="drop one column, preserving all other columns and rows")
     p.add_argument("table")
     p.add_argument("column")
 
-    p = sub.add_parser("import-csv", help="import a CSV file into a table")
+    p = add_cmd("import-csv", help="import a CSV file into a table")
     p.add_argument("table")
     p.add_argument("file")
     p.add_argument("--key", default=None, help="dedup column (same as add --key)")
