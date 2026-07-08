@@ -407,9 +407,24 @@ def process_tranche(rows: list[dict], steps: list, ai_step, ctx: dict,
     flush()
 
 
+def load_ai_params(raw: str) -> dict:
+    """--ai accepts inline JSON or '@/path/to/params.json' (long missions)."""
+    if raw.startswith("@"):
+        with open(raw[1:], encoding="utf-8") as f:
+            raw = f.read()
+    try:
+        params = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise RunnerError(f"--ai: invalid JSON ({exc})") from None
+    if not isinstance(params, dict):
+        raise RunnerError("--ai must be a JSON object")
+    return params
+
+
 def run(args) -> dict:
     steps = [load_step(*parse_step(raw)) for raw in args.step]
-    ai_step = build_ai(json.loads(args.ai), args.no_retry_timeout) if args.ai else None
+    ai_params = load_ai_params(args.ai) if args.ai else None
+    ai_step = build_ai(ai_params, args.no_retry_timeout) if ai_params else None
     if not steps and ai_step is None:
         raise RunnerError("no steps — pass at least one --step or --ai")
 
@@ -420,7 +435,7 @@ def run(args) -> dict:
                           "initialize it to 'pending' on rows in scope first")
     if ai_step is not None and not steps:
         # template vars must be table columns when no step can produce them
-        prompt = json.loads(args.ai).get("prompt", "")
+        prompt = ai_params.get("prompt", "")
         unknown = [v for v in template_vars(prompt) if v not in columns]
         if unknown:
             raise RunnerError(
@@ -538,10 +553,11 @@ def main(argv=None) -> int:
                    metavar="'FILE.py:FN [{json}]'",
                    help="custom step, repeatable, run in order; the first '{' "
                         "starts the JSON args passed as step(row, ctx, args)")
-    p.add_argument("--ai", default=None, metavar="'{JSON}'",
+    p.add_argument("--ai", default=None, metavar="'{JSON}|@params.json'",
                    help='built-in AI step (always last): {"prompt":"...{{col}}...",'
                         '"schema":{"type":"object","properties":{...}},"web":true,'
-                        '"model":"haiku","evidence":true,"input_cols":"all"}')
+                        '"model":"haiku","evidence":true,"input_cols":"all"} — '
+                        "or '@/path/params.json' for long missions")
     p.add_argument("--where", default=None,
                    help="extra SQL condition ANDed to the claim")
     p.add_argument("--retry-failed", action="store_true",

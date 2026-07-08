@@ -25,7 +25,8 @@ serial version — results are assembled in input order.
 
 matrix.json (hunt):
     {"titles": ["couvreur", ...],             REQUIRED - one query per title x location
-     "locations": ["33", "33D", "Bordeaux"],  dept number, France Travail code, or city
+     "locations": ["33", "69R", "Bordeaux"],  dept number, FT region code, or city
+                                              (legacy "<dept>D" accepted, auto-stripped: dead endpoint)
      "tools": ["PRODEVIS", ...],              matched in descriptions, never queried
      "pains": ["surcroit", ...],              matched in descriptions, never queried
      "negative": ["..."],                     extra agency brands to flag
@@ -73,6 +74,47 @@ AGENCY_TOKENS = [
     "advance emploi", "samsic emploi", "job&box", "sovitrat", "up skills",
     "expectra", "hays", "page personnel", "leader", "get carrieres",
     "tt",  # 'TRIDENT TT' — travail-temporaire suffix, word-boundary safe
+    # Executive/finance recruiting firms that slipped through a field run
+    # (2026-07: Michael Page, LHH, Comptalents, Cliff Partners reached the
+    # judgment pass) + their frequent siblings on finance searches:
+    "michael page", "pagegroup", "lhh", "comptalents", "cliff partners",
+    "robert half", "fed finance", "robert walters", "walters people",
+    "fyte", "grant alexander", "harry hope", "winsearch",
+]
+#: Matched against the COMPANY NAME only — never the offer title: an SME
+#: hiring a "chargé de recrutement" is a real growth signal, but a company
+#: NAMED "… RECRUTEMENT" is a cabinet (field-tested: KEYSTONE RECRUTEMENT
+#: crossed TWO runs; expertise-comptable firms sell the pain, they don't
+#: have it — "chef de mission expertise comptable" offers).
+NAME_AGENCY_TOKENS = [
+    "recrutement", "recruitment", "ressources humaines", "conseil rh",
+    "expertise comptable", "executive search", "talent acquisition",
+    "interim management", "portage salarial",
+    # Modern staffing brand fashion (field-tested: 13/18 committed rows of a
+    # run were cabinets named with these — Voluntae-style opaque brands are
+    # caught by the offer-text lane in curate.py, not here): word-boundary,
+    # so "Talentsoft" or "électricité" never fire.
+    "talent", "talents", "ressources", "people", "executive", "rh", "hr",
+    "recrute", "super recruteur", "staffing", "headhunting", "hunting",
+    "search partners", "emploi",
+]
+
+#: KNOWN_STAFFING_BRANDS — the CUMULATIVE memory of the field-test loop,
+#: plugin-level. Every opaque-brand cabinet UNMASKED by an identity check
+#: (web-verified "this is a recruiting/expertise-comptable firm") gets
+#: appended here, so the knowledge survives across workspaces — the
+#: per-workspace exclude_employers learning evaporates on every fresh
+#: workspace, and the SAME brands (Voluntae, three runs in a row) were
+#: being re-verified at ~1 web check each, every run. Name-only matching,
+#: word-boundary. Append freely: a false positive lands in rejected.jsonl
+#: with its reason, visible and re-addable by hand.
+KNOWN_STAFFING_BRANDS = [
+    # web-verified across field runs 2026-07 (hiring-test b/c/f/h):
+    "voluntae", "noviac", "huca group", "wiico", "adsearch",
+    "vidal associates", "s you", "nextep", "kalixens", "altitude finance",
+    "keyman", "cabrh", "timtargett", "jobmania", "humanae", "humanup",
+    "raisehup", "team is", "emade conseil", "morgan philips", "fmi",
+    "hermesiane", "tyls", "financepeople", "comptaforces",
 ]
 STAGE_RE = re.compile(r"\b(stage|stagiaire|alternan\w*|apprenti\w*)\b", re.I)
 CONTRACT_RE = re.compile(
@@ -198,6 +240,11 @@ def agency_suspect(company, title, extra_negative):
         t = norm(token)
         if t and f" {t} " in hay:
             return token.strip()
+    name_hay = " " + norm(company) + " "
+    for token in NAME_AGENCY_TOKENS + KNOWN_STAFFING_BRANDS:
+        t = norm(token)
+        if t and f" {t} " in name_hay:
+            return token.strip()
     return None
 
 
@@ -205,9 +252,15 @@ def agency_suspect(company, title, extra_negative):
 
 def ft_location_code(loc):
     loc = (loc or "").strip()
+    # The historic "<dept>D" département code is DEAD: it now 301s to a
+    # pretty URL that answers 410 (field-tested 2026-07: whole "chef
+    # comptable" sweeps returned 410). The bare dept number is what the
+    # search endpoint accepts today (verified live: 200 + offer cards).
     if re.fullmatch(r"\d{2,3}", loc):
-        return f"{loc}D"
-    if re.fullmatch(r"\d{1,3}[DR]|\d{5}", loc):
+        return loc
+    if re.fullmatch(r"\d{2,3}D", loc):
+        return loc[:-1]  # strip the dead suffix from caller-supplied codes
+    if re.fullmatch(r"\d{1,3}R|\d{5}", loc):
         return loc
     return None  # free-text city: goes into motsCles instead
 
@@ -579,7 +632,11 @@ def run_check(args):
         # is across companies, no nested pools.
         log(f"[check] {c.get('name')}")
         raw = list(swept.get(id(c), []))
-        cards = ft_search(c.get("name", ""), c.get("location", ""))
+        # By-name lookup on BOTH boards — FT alone made HelloWork-sourced
+        # accounts read "quiet" while their HW offer was still live
+        # (field-tested false negatives); match_company filters the noise.
+        cards = ft_search(c.get("name", ""), c.get("location", "")) \
+            + hw_search(c.get("name", ""), c.get("location", ""))
         for card in cards:
             if match_company(card["company_name"], [c]) is not None:
                 raw.append(card)
