@@ -95,7 +95,17 @@ DESC_AGENCY_RE = re.compile(
     r"(nous|on) recrutons? pour|"
     r"specialis\w+ (en|du|dans le) recrutement|"
     r"acteur (majeur )?(du recrutement|de l interim)|"
-    r"conseil en recrutement|super recruteur)\b")
+    r"conseil en recrutement|super recruteur|"
+    r"notre cabinet|le cabinet recherche|"
+    r"portefeuille de dossiers|nos mandants)\b")
+
+#: Expertise-comptable job-title fingerprint: these titles exist ONLY in
+#: cabinets — an in-house hire is a "comptable", never a "chef de mission"
+#: or a "collaborateur comptable" (field-tested: a run had to hand-kill
+#: them one by one). Matched on the norm'd offer TITLE.
+TITLE_CABINET_RE = re.compile(
+    r"\b(chef de mission|collaborateur comptable|collaboratrice comptable|"
+    r"chef de mission expertise)\b")
 
 #: Public / nonprofit employers — killable at sourcing (matrix
 #: exclude_public=false disables). Matched word-boundary on the norm'd name.
@@ -175,16 +185,20 @@ def run(staging, matrix_path, out, today):
 
     # Measured reachable (SKILL Phase 3): drop criteria this channel/ICP
     # cannot mechanically produce, so 65 % of reachable stays meaningful.
+    # VOLUME NEVER GATES: the ≥2-offers bonus rewards a population the SMB
+    # target cannot join (field-tested: multi-offer cabinets and mega
+    # distributors trusted the committed band while every single-offer
+    # target SME plateaued just UNDER the cut and got parked — the sort
+    # was inverted). The commit/park decision is therefore computed on a
+    # volume-free gate score; volume still boosts the stored hiring_score,
+    # where it belongs (a priority signal for rank-accounts downstream).
     with_tool = sum(1 for o in offers if o.get("tool_hits"))
-    multi = sum(1 for c in companies if c.get("n_offers", 1) >= 2)
-    dropped = ["size (never visible in an ad)"]
-    reachable = 90
+    dropped = ["size (never visible in an ad)",
+               "volume (booster only — never gates the cut)"]
+    reachable = 75
     if offers and with_tool / len(offers) < 0.05:
         reachable -= 15
         dropped.append(f"tool mention ({with_tool}/{len(offers)} offers)")
-    if multi / len(companies) < 0.10:
-        reachable -= 15
-        dropped.append(f"volume bonus ({multi}/{len(companies)} companies ≥2 offers)")
     cut = math.ceil(0.65 * reachable)
     park = math.ceil(0.45 * reachable)
 
@@ -204,6 +218,8 @@ def run(staging, matrix_path, out, today):
             reason = f"staffing/cabinet ({brand})"
         elif staffing_text is not None:
             reason = "staffing language in offer text (recruits for a client)"
+        elif any(TITLE_CABINET_RE.search(jobs.norm(o.get("title", ""))) for o in cos):
+            reason = "expertise-comptable title fingerprint (chef de mission…)"
         elif exclude_public and PUBLIC_RE.search(f" {nname} "):
             reason = "public/nonprofit employer"
         elif any(f" {m} " in f" {nname} " for m in
@@ -227,6 +243,9 @@ def run(staging, matrix_path, out, today):
 
         role_offers = [o for o, g in hits if g == role_group]
         roles = sorted({o.get("title", "").strip() for o in role_offers if o.get("title")})
+        vol = c.get("volume_bonus", 0) or 0
+        gate_score = min(100, max(0, c.get("prescore65", 0) - vol)
+                         + groups[role_group]["points"])
         score = min(100, c.get("prescore65", 0) + groups[role_group]["points"])
         best = max(role_offers,
                    key=lambda o: (o.get("posted_date") or "", o.get("prescore65", 0)))
@@ -246,7 +265,8 @@ def run(staging, matrix_path, out, today):
             "name": name, "location": best.get("location", ""),
             "role_group": role_group, "roles": roles,
             "n_role_offers": len(role_offers),
-            "hiring_score": score, "hiring_angle": angle,
+            "hiring_score": score, "gate_score": gate_score,
+            "hiring_angle": angle,
             "signal_date": freshest,
             "signal_freshness": "fresh" if fresh_days is not None and fresh_days <= 60
                                 else "context",
@@ -256,8 +276,9 @@ def run(staging, matrix_path, out, today):
             "evidence_url": best.get("url", ""),
             "pain_hits": pains, "tool_hits": sorted(c.get("tool_hits") or []),
         }
-        (committed if score >= cut else parked if score >= park
-         else rejected).append(row if score >= park else {**row, "reject_reason": f"score {score} < park {park}"})
+        (committed if gate_score >= cut else parked if gate_score >= park
+         else rejected).append(row if gate_score >= park else
+                               {**row, "reject_reason": f"gate score {gate_score} < park {park}"})
 
     committed.sort(key=lambda r: -r["hiring_score"])
     parked.sort(key=lambda r: -r["hiring_score"])

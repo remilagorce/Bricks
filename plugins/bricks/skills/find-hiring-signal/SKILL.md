@@ -80,7 +80,11 @@ the confirmed matrix to a temp JSON and run:
 
 The script generates the queries mechanically, fetches France Travail
 and HelloWork search pages politely (plus offer detail pages for
-microdata dates, caps `--max-queries 30 --max-details 40`), flags
+microdata dates). **Size `--max-queries` upfront: ≥ titles × locations
+× boards** — the default 30 truncates a 6-titles × 5-zones matrix
+mid-sweep (field-tested: a run silently skipped its 3 terrain titles
+and had to re-hunt, doubling the fetch time). `--max-details 40`
+stays. The script flags
 agencies/stage/expired into `rejected.jsonl`, matches tools/pains,
 pre-scores the mechanical 65/100 and aggregates `companies.jsonl` —
 0 credits, no LLM tokens. For SMB/artisan ICPs this alone usually
@@ -139,7 +143,13 @@ with `elapsed_s` (§8):
   pains merged in (contextual proof, never "j'ai vu que vous recrutez").
 
 Grid /100 unchanged: recency 20 · role 25 · tool 15 · pain 15 · volume
-15 · size 10 (size stays for the score brick, post-enrichment).
+15 · size 10 (size stays for the score brick, post-enrichment). **The
+volume bonus BOOSTS `hiring_score` but never gates the cut**: the
+commit/park decision runs on a volume-free gate score (field-tested:
+multi-offer cabinets and mega distributors trusted the committed band
+while every single-offer target SME landed just under the cut — the
+sort was inverted; volume stays where it belongs, as a priority signal
+for rank-accounts downstream).
 
 **The employer-identity wave — the industry-proof net, BEFORE commit.**
 Name tokens and offer-text patterns catch most intermediaries, but a

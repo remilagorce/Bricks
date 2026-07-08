@@ -614,7 +614,11 @@ def run_check(args):
         # is across companies, no nested pools.
         log(f"[check] {c.get('name')}")
         raw = list(swept.get(id(c), []))
-        cards = ft_search(c.get("name", ""), c.get("location", ""))
+        # By-name lookup on BOTH boards — FT alone made HelloWork-sourced
+        # accounts read "quiet" while their HW offer was still live
+        # (field-tested false negatives); match_company filters the noise.
+        cards = ft_search(c.get("name", ""), c.get("location", "")) \
+            + hw_search(c.get("name", ""), c.get("location", ""))
         for card in cards:
             if match_company(card["company_name"], [c]) is not None:
                 raw.append(card)
