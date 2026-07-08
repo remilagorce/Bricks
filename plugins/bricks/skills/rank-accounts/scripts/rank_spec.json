@@ -19,7 +19,7 @@
   "context_multiplier": 0.2,
   "freshness_label_multiplier": {"fresh": 0.8, "context": 0.2},
 
-  "volume_bonus": {"min_fresh_kinds": 2, "points": 10},
+  "volume_bonus": {"min_fresh_kinds": 2, "min_fresh_signals": 2, "points": 10},
   "warning": {"field": "warning", "cap_score": 15},
 
   "tiers": {"now": 70, "week": 40, "default": "nurture"},

@@ -41,7 +41,7 @@ Spec (JSON) — every field has a default baked in, so an empty `{}` still runs:
       "recency_multiplier": [[7, 1.0], [30, 0.8], [60, 0.6]],
       "context_multiplier": 0.2,
       "freshness_label_multiplier": {"fresh": 0.8, "context": 0.2},
-      "volume_bonus": {"min_fresh_kinds": 2, "points": 10},
+      "volume_bonus": {"min_fresh_kinds": 2, "min_fresh_signals": 2, "points": 10},
       "warning": {"field": "warning", "cap_score": 15},
       "tiers": {"now": 70, "week": 40, "default": "nurture"},
       "kind_labels": {"hiring": "Recrute en ce moment",
@@ -77,7 +77,7 @@ DEFAULT_SPEC = {
     "recency_multiplier": [[7, 1.0], [30, 0.8], [60, 0.6]],
     "context_multiplier": 0.2,
     "freshness_label_multiplier": {"fresh": 0.8, "context": 0.2},
-    "volume_bonus": {"min_fresh_kinds": 2, "points": 10},
+    "volume_bonus": {"min_fresh_kinds": 2, "min_fresh_signals": 2, "points": 10},
     "warning": {"field": "warning", "cap_score": 15},
     "tiers": {"now": 70, "week": 40, "default": "nurture"},
     "kind_labels": {"hiring": "Recrute en ce moment",
@@ -204,6 +204,7 @@ def _rank_company(company: dict, sigs: list[dict], spec: dict,
     top = None                       # strongest overall (drives the score)
     top_fresh = None                 # strongest FRESH one (drives why_now)
     fresh_kinds: set[str] = set()
+    fresh_count = 0
     warned = False
     warn_field = spec.get("warning", {}).get("field")
     for sig in sigs:
@@ -214,6 +215,7 @@ def _rank_company(company: dict, sigs: list[dict], spec: dict,
         is_fresh = base and mult > context_mult
         if is_fresh:
             fresh_kinds.add(kind)
+            fresh_count += 1
         if base and (top is None or effective > top[0]):
             top = (effective, sig, mult, kind)
         if is_fresh and (top_fresh is None or effective > top_fresh[0]):
@@ -222,8 +224,14 @@ def _rank_company(company: dict, sigs: list[dict], spec: dict,
             warned = True
 
     signal_pts = top[0] if top else 0.0
+    # Volume = strength: fires on signal DIVERSITY (≥2 fresh kinds) OR on
+    # same-kind VOLUME (≥2 fresh signals, e.g. 3 job offers ≤60 days —
+    # find-hiring-signal doctrine: several offers = stronger signal;
+    # field-tested: 3 fresh hiring offers earned nothing vs a single one).
     volume = spec["volume_bonus"]
-    volume_pts = volume["points"] if len(fresh_kinds) >= volume["min_fresh_kinds"] else 0
+    volume_pts = volume["points"] if (
+        len(fresh_kinds) >= volume["min_fresh_kinds"]
+        or fresh_count >= volume.get("min_fresh_signals", 2)) else 0
 
     score = fit_pts + signal_pts + volume_pts
     if warned:

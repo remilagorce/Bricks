@@ -81,6 +81,23 @@ AGENCY_TOKENS = [
     "robert half", "fed finance", "robert walters", "walters people",
     "fyte", "grant alexander", "harry hope", "winsearch",
 ]
+#: Matched against the COMPANY NAME only — never the offer title: an SME
+#: hiring a "chargé de recrutement" is a real growth signal, but a company
+#: NAMED "… RECRUTEMENT" is a cabinet (field-tested: KEYSTONE RECRUTEMENT
+#: crossed TWO runs; expertise-comptable firms sell the pain, they don't
+#: have it — "chef de mission expertise comptable" offers).
+NAME_AGENCY_TOKENS = [
+    "recrutement", "recruitment", "ressources humaines", "conseil rh",
+    "expertise comptable", "executive search", "talent acquisition",
+    "interim management", "portage salarial",
+    # Modern staffing brand fashion (field-tested: 13/18 committed rows of a
+    # run were cabinets named with these — Voluntae-style opaque brands are
+    # caught by the offer-text lane in curate.py, not here): word-boundary,
+    # so "Talentsoft" or "électricité" never fire.
+    "talent", "talents", "ressources", "people", "executive", "rh",
+    "recrute", "super recruteur", "staffing", "headhunting", "hunting",
+    "search partners", "emploi",
+]
 STAGE_RE = re.compile(r"\b(stage|stagiaire|alternan\w*|apprenti\w*)\b", re.I)
 CONTRACT_RE = re.compile(
     r"\b(CDI|CDD|Mission intérimaire|Intérim|Saisonnier|Franchise)\b", re.I)
@@ -204,6 +221,11 @@ def agency_suspect(company, title, extra_negative):
     for token in AGENCY_TOKENS + [n for n in extra_negative if n]:
         t = norm(token)
         if t and f" {t} " in hay:
+            return token.strip()
+    name_hay = " " + norm(company) + " "
+    for token in NAME_AGENCY_TOKENS:
+        t = norm(token)
+        if t and f" {t} " in name_hay:
             return token.strip()
     return None
 

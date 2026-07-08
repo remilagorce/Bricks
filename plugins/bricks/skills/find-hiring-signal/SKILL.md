@@ -45,10 +45,10 @@ Every query encodes ONE GTM hypothesis —
 `"startup jobs France"`. Show 3 example queries with the matrix.
 
 **Below the big-spend threshold (§8, default 50 credits) the run does
-not ask at all**: the matrix + budget + cut (RELATIVE — see Phase 3:
-commit ≥ 65 % of the points REACHABLE for this ICP, park 45-65 %;
-announce the computed absolute numbers) are ANNOUNCED and the hunt
-proceeds — a wrong
+not ask at all**: the matrix + budget + cut (RELATIVE — computed by
+curate.py in Phase 2+3: commit ≥ 65 % of the points REACHABLE for this
+ICP, park 45-65 %; announce the rule, the receipt shows the measured
+numbers) are ANNOUNCED and the hunt proceeds — a wrong
 matrix costs ~0 with jobs.py, and the user adjusts after the receipt.
 Above the threshold: ONE grouped GO for everything (field-tested: 5-6
 serial gates per run is what makes it slow). It
@@ -61,6 +61,14 @@ brick's HARD gate is never overridden: satisfy it at plan time or end
 the chain before that brick, saying what is missing. Persist to
 `memory/state.json` (`hiring_matrix`) + one NOTES.md line; re-runs
 reuse it silently and re-ask only if `context/` changed.
+
+**Self-healing exclusions.** When compiling the matrix, fold the
+workspace's kill flags into it: every intermediary unmasked by ANY
+brick downstream (signal-person, enrich, a manual kill) is recorded in
+`memory/` (state.json kill flags / NOTES.md) — read them and append
+those employer names to the matrix's `exclude_employers`. A cabinet
+that fooled one run must never reach a second one in this workspace,
+whatever it is called and whatever the industry.
 
 ## Phase 1 — the hunt (script first, SERP as escalation)
 
@@ -93,89 +101,103 @@ carries these lanes too. NO date operators anywhere (field-tested
 useless); freshness is read on the offer pages. LinkedIn note: a
 public post's date derives from its post ID.
 
-## Phase 2 — extract and verify (staging, never straight to db)
+## Phase 2+3 — curate: the FROZEN crible (a script, never session code)
 
-The script's `offers.jsonl` arrives pre-extracted and pre-filtered —
-read it and apply JUDGMENT only: spot-check top rows against their
-`url`, catch what keyword matching misread (an agency phrasing the
-script missed, a pain word used in another sense). For step-2 SERP
-hits, scrape (`scrape_as_markdown`) and extract the same fields into
-the same staging files. Keep ONLY offers that pass every filter
-(the script enforces the mechanical ones; re-check edge cases):
+jobs.py's staging is filtered, scored and angled by the frozen kernel —
+NEVER by an ad-hoc script written in session and NEVER by judging rows
+one by one in the conversation (field-tested: a run re-derived this
+crible live, hit a case-sensitivity bug that wrongly rejected 105 valid
+finance roles, and spent ~25 minutes debugging what the kernel does in
+milliseconds):
 
-- posted ≤ 60 days (≤ 30 preferred — say which);
-- employer clearly identifiable — recruitment agencies/ESN excluded
-  unless the end client is named (then the client is the row);
-- not stage/alternance (unless the user asked);
-- description substantial enough to extract tools/pain from.
+    python3 "${CLAUDE_PLUGIN_ROOT}/skills/find-hiring-signal/scripts/curate.py" run \
+      --staging <hunt outdir> --matrix <matrix.json> --out <rundir>
 
+(For step-2 SERP hits, extract the same fields into the staging jsonl
+first — curate runs over everything.) One deterministic pass, receipt
+with `elapsed_s` (§8):
+
+- **Filters**: staffing/cabinets by NAME (`jobs.py` NAME_AGENCY_TOKENS —
+  "… RECRUTEMENT", expertise comptable…), public/nonprofit employers
+  (matrix `exclude_public`, default true), obvious mega groups (+ matrix
+  `exclude_employers`), employer-name-is-a-job-title parsing artifacts,
+  and everything jobs.py already flagged (agencies, stage, expired).
+- **Role points**: +25 finance / +15 force terrain, matched case- and
+  accent-insensitively; matrix `role_groups` overrides titles, points
+  and angle templates per group.
+- **The RELATIVE cut, MEASURED on the batch** — never an absolute 70.
+  Some grid criteria are structurally out of reach: size (10) is never
+  visible in an ad; the volume bonus (15) rewards big employers (an
+  independent SME hires ONE chef comptable); tool mentions (15) almost
+  never appear on France Travail/HelloWork cards (measured 1/144).
+  curate computes `reachable` = 100 − the criteria the batch cannot
+  produce, then **commit ≥ 65 % of reachable, park 45-65 %** — the
+  receipt shows reachable/cut/park and which criteria were dropped. A
+  multi-offer scaleup hunt keeps reachable high → the bar stays high
+  automatically.
+- **The outreach angle**, templated per role group with the offer's
+  pains merged in (contextual proof, never "j'ai vu que vous recrutez").
+
+Grid /100 unchanged: recency 20 · role 25 · tool 15 · pain 15 · volume
+15 · size 10 (size stays for the score brick, post-enrichment).
+
+**The employer-identity wave — the industry-proof net, BEFORE commit.**
+Name tokens and offer-text patterns catch most intermediaries, but a
+cabinet with an opaque brand and neutral prose can pass any static
+filter (field-tested: 13 of 18 committed rows of a run were
+modern-brand cabinets — Voluntae, Lynx RH, "super recruteur"… — and
+cleaning them DOWNSTREAM cost 11 serial web checks). So before the DB
+commit, verify the committed rows' identity in ONE parallel web wave
+(§9.1: all searches fired in a single message, built-in web search,
+free; cap ~20 — above that, verify the top 20 by score and say so):
+one query per company — is this an OPERATING company, or a
+recruiting / interim / expertise-comptable intermediary? Kill the
+intermediaries from the payloads (they join `rejected.jsonl` with the
+reason), THEN commit. Bounded and upstream beats unbounded and
+downstream.
+
+YOUR judgment beyond that wave stays by exception: read the receipt
+(distribution, rejectReasons, samples), spot-check edge rows of
+`committed.jsonl` against their `url`, and override individual calls —
+re-add a wrongly rejected company by hand — never rewrite the crible's
+logic in session. Return to the user ONLY if the distribution looks
+absurd (everything under the park band, or > 90 % passing).
 Company-level data only — never store candidate or recruiter personal
-data (CNIL).
-
-## Phase 3 — group and score (the GTM logic, not the scraping)
-
-The script already grouped by company (`companies.jsonl`) and scored
-the mechanical 65: recency (20), tool mention (15), pain wording
-(15), ≥2 offers volume (15). Add the judgment points — role squarely
-in the offer's category (25), size fits the ICP when visible (10) —
-and adjust where keyword matching misread context. Full grid /100:
-
-| Criterion | Points |
-|---|---:|
-| freshest offer ≤ 7 days | 20 |
-| role squarely in the offer's category | 25 |
-| target/competitor tool named | 15 |
-| explicit pain wording in the description | 15 |
-| ≥ 2 relevant offers within 60 days | 15 |
-| company size fits the ICP (when visible) | 10 |
-
-**The cut is RELATIVE to the points reachable at sourcing — never an
-absolute 70.** Two of the grid's criteria are structurally out of reach
-on some ICPs: size (10) is never visible in a job ad (it is deferred to
-enrichment), and the ≥2-offers volume bonus (15) rewards big employers —
-an independent SME hires ONE chef comptable, not three. Field-tested
-twice: with those 25 points unreachable the ceiling is ~60-75, an
-absolute ≥ 70 commits (almost) nothing, and every run had to improvise a
-~45-50 override. When the same override happens every run, the rule is
-wrong — so the rule is now: compute `reachable` = 100 minus the criteria
-this ICP cannot mechanically produce (size when unknown at sourcing;
-volume bonus when the ICP is single-offer SMEs), then **commit ≥ 65 % of
-reachable, park 45-65 %** (SMB example: reachable 75 → commit ≥ 49, park
-34-49; a multi-offer scaleup hunt keeps reachable 90-100 → the bar stays
-high automatically). Declare the computed absolute numbers at the
-phase-0 GO. Apply it and show the distribution (commit / parked /
-rejected) in the receipt; return to the user ONLY if it looks absurd
-(everything below the park band, or > 90 % passing). This score is the
-brick's sourcing filter, not the ICP score — the score brick still runs
-on these rows like on any other.
+data (CNIL). This score is the brick's sourcing filter, not the ICP
+score — the score brick still runs on these rows like any other.
 
 ## Phase 4 — commit and hand over
 
-Via `db.py` (§5, pass `--db <absolute path>`): `companies` rows — `name`,
-`domain` (verified on the offer or the company site, never guessed;
-domain-less rows are name-checked like find-directory-scrape),
-`source='hiring-signal'`, `status='new'`, `hiring_score`,
-`hiring_angle` — dedup on domain, existing rows enriched with the
-signal instead of duplicated. **Insert the companies FIRST, then read
-their `_id` back** (`db.py select companies --cols _id,domain,name` on
-the rows you just wrote) — because the signals rows MUST carry the
-company's `_id`. Plus ONE `signals` row per company: **`company_id`**
-(the `_id` just read back — never omit it: a signals row without
-`company_id` is an orphan that downstream joins silently drop,
-field-tested — it broke rank-accounts' fit×signal fusion) +
-**`company_name`** (denormalized, for the human table view, same as
-signal-person), `kind='hiring'`, `date` = freshest offer, `freshness`
-(≤ 60 days = `fresh`), summary = roles + pains + volume,
-`evidence_url`, `sig_key`
-= `hiring:<company_id or name>:<normalized evidence_url>` with
-`--key sig_key` — URL normalized (scheme and `www.` stripped, no
-trailing slash), the SAME convention as signal-person: both hiring
-writers must key one offer identically or cross-run dedup breaks
-(field-tested: a backfill and a live run produced two conventions).
-Career-page evidence keys on the domain alone (one hiring signal per
-company); board offers keep their full offer URL. Commits
-go in ONE `db.py` write per phase — the staging file, batched
-— never one dispatch per row.
+Four commands, all payloads pre-built by curate (§5, always
+`--db <absolute path>`; ONE write per phase, never per row):
+
+```bash
+# 1. companies (curate wrote the payload: name, source='hiring-signal',
+#    status='new', location, hiring_score, hiring_angle)
+python3 .../tools/db.py add companies --rows - --key name \
+  --db <db> < <rundir>/companies_payload.json
+# 2. read the _ids back
+python3 .../tools/db.py select companies --cols _id,name --limit -1 \
+  --db <db> > <rundir>/sel.json
+# 3. build the signals rows — company_id ALWAYS set (emit-signals ERRORS
+#    on any unmatched name rather than writing an orphan: field-tested,
+#    orphaned signals broke rank-accounts' fit×signal fusion)
+python3 .../skills/find-hiring-signal/scripts/curate.py emit-signals \
+  --committed <rundir>/committed.jsonl --ids <rundir>/sel.json \
+  --out <rundir>/signals_payload.json
+# 4. signals, deduped on the shared key convention
+python3 .../tools/db.py add signals --rows - --key sig_key \
+  --db <db> < <rundir>/signals_payload.json
+```
+
+`sig_key` = `hiring:<company_id>:<normalized evidence_url>` (scheme and
+`www.` stripped, no trailing slash) — the SAME convention as
+signal-person, so both hiring writers key one offer identically
+(field-tested: two conventions once coexisted and broke cross-run
+dedup). Career-page evidence keys on the domain alone (one hiring
+signal per company); board offers keep their full offer URL. Boards
+carry no domain — companies dedup on `name` at insert, then on `domain`
+once enrichment resolves it (name-checked like find-directory-scrape).
 
 **The angle doctrine**: `hiring_angle` uses the offer as contextual
 proof, never as a creepy opener — "vous structurez votre équipe RevOps
