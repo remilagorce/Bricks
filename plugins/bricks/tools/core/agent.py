@@ -66,8 +66,13 @@ def _sdk():
         import claude_agent_sdk
         return claude_agent_sdk
     except ImportError as exc:
-        raise AgentError("claude-agent-sdk n'est pas installé — "
-                         "pip3 install --user --break-system-packages claude-agent-sdk") from exc
+        py = f"{sys.version_info.major}.{sys.version_info.minor}"
+        raise AgentError(
+            "claude-agent-sdk n'est pas installé — pip3 install --user "
+            "--break-system-packages claude-agent-sdk (nécessite Python >= 3.10 ; "
+            f"ce process tourne en {py} — lance les tools avec python3.12 le cas "
+            "échéant). Alternative sans SDK : BRICKS_AGENT_TRANSPORT=api "
+            "(crédits API, ANTHROPIC_API_KEY dans ~/.bricks/env).") from exc
 
 
 def _auth_hint(message: str) -> str:

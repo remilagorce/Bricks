@@ -192,31 +192,43 @@ def search(domain: str, params: dict) -> dict:
 _params_cache: dict = {}
 
 
-def _params() -> dict:
-    path = os.environ.get("FULLENRICH_PARAMS", "").strip()
-    if not path:
-        raise RuntimeError("FULLENRICH_PARAMS must point to the params JSON "
-                           "compiled by the calling skill")
-    if path not in _params_cache:
+def _params(args: dict) -> dict:
+    """Search params: inline in the step args, a file path, or the legacy env."""
+    inline = args.get("params")
+    if isinstance(inline, dict):
+        loaded = inline
+        cache_key = None
+    else:
+        path = (inline or os.environ.get("FULLENRICH_PARAMS", "")).strip()
+        if not path:
+            raise RuntimeError('step needs {"params": {...}|"path.json"} in its '
+                               "args (or FULLENRICH_PARAMS in the env)")
+        if path in _params_cache:
+            return _params_cache[path]
         with open(path, encoding="utf-8") as f:
             loaded = json.load(f)
-        if not loaded.get("groups"):
-            raise RuntimeError("params JSON needs a non-empty 'groups' list")
-        _params_cache[path] = loaded
-    return _params_cache[path]
+        cache_key = path
+    if not loaded.get("groups"):
+        raise RuntimeError("params JSON needs a non-empty 'groups' list")
+    if cache_key:
+        _params_cache[cache_key] = loaded
+    return loaded
 
 
-def step(row: dict, ctx: dict) -> dict:
-    out = search(row.get("domain", ""), _params())
+def step(row: dict, ctx: dict, args: dict = None) -> dict:
+    args = args or {}
+    out = search(row.get("domain", ""), _params(args))
     fields = {"people_found": len(out["people"]),
               "people_evidence": out["evidence"]}
     if not out["people"]:
         return fields
-    if ctx.get("commit"):
+    if ctx.get("commit") or ctx.get("preview"):
         import db as dbmod  # core is already on sys.path
-        table = os.environ.get("FULLENRICH_OUT_TABLE", "people").strip() or "people"
+        table = (args.get("out_table") or ctx.get("out_table")
+                 or os.environ.get("FULLENRICH_OUT_TABLE", "").strip() or "people")
         children = [{**p, "company_id": row.get("_id"),
-                     "company_domain": (row.get("domain") or "").strip().lower()}
+                     "company_domain": (row.get("domain") or "").strip().lower(),
+                     "source_run": ctx.get("run_id")}
                     for p in out["people"]]
         dbmod.add(ctx["db"], table, children, key="linkedin_url")
     else:

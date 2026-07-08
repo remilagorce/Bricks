@@ -360,7 +360,13 @@ def add(path: str, table: str, rows: list[dict], key: str | None = None) -> dict
 
     conn = connect(path)
     try:
-        with conn:
+        # BEGIN IMMEDIATE: the write lock is taken BEFORE the existence and
+        # dedup checks, so parallel writers (runner steps inserting child
+        # rows) can never race on CREATE TABLE or on the --key dedup.
+        old_isolation = conn.isolation_level
+        conn.isolation_level = None
+        try:
+            conn.execute("BEGIN IMMEDIATE")
             created = not _table_exists(conn, table)
             if created:
                 cols_sql = ", ".join(f"{_q(c)} TEXT" for c in ordered_cols)
@@ -390,6 +396,12 @@ def add(path: str, table: str, rows: list[dict], key: str | None = None) -> dict
                     f"VALUES ({','.join('?' * len(cols))})",
                     [_cell(r[c]) for c in cols])
             total = conn.execute(f"SELECT COUNT(*) AS c FROM {_q(table)}").fetchone()["c"]
+            conn.execute("COMMIT")
+        except BaseException:
+            conn.execute("ROLLBACK")
+            raise
+        finally:
+            conn.isolation_level = old_isolation
     finally:
         conn.close()
     return {"ok": True, "action": "add", "table": table, "created": created,
