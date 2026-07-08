@@ -28,6 +28,13 @@ params.json contract (written by the calling skill, CONVENTIONS §11):
 Env: FULLENRICH_API_KEY (Bearer — dashboard key, NOT the MCP OAuth);
      FULLENRICH_API_URL overrides the endpoint (tests use a local stub).
 
+Cost note (field-measured): the DIRECT API bills ~0.25 credit per search
+call (metadata.credits) — unlike the MCP search_people, which is free.
+The cascade only re-queries a company on the waves its previous waves
+MISSED, and inserted people dedup on person_key across runs — so multiple
+waves (e.g. English + French titles on a FR market) never pay twice for
+a company already resolved and never insert the same person twice.
+
 fetch(row, params) -> outcome:
     {"status": "done" | "not_found" | "failed",
      "rows": [{full_name, role, seniority, linkedin_url, role_type,
@@ -61,7 +68,11 @@ envfile.load()  # ~/.bricks/env → FULLENRICH_API_KEY without shell exports
 
 DEFAULT_API_URL = "https://app.fullenrich.com/api/v2/people/search"
 TIMEOUT = 30
-RATE_SLEEP = 0.35  # polite: their limiter answers "try again in 1m" when abused
+#: Field-measured (2026-07, 283-company run): 0.35 s → HTTP 429 storms even
+#: SERIAL (223/271 rows failed, then 163 still failed at 0.35 s); 2 s passed
+#: with 0 failures. Their limiter answers "try again in 1m" when abused.
+RATE_SLEEP = 2.0
+RETRY_429_SLEEP = 30  # one polite retry per call before failing the row
 
 
 class RateLimiter:
@@ -100,11 +111,16 @@ def masked(full_name: str) -> bool:
 
 def call_api(domain: str, titles: list, seniority: list | None,
              limit: int, key: str) -> dict:
-    body = {"current_company_domains": [domain],
-            "current_position_titles": titles,
+    # The API wants FILTER OBJECTS ({"value": ...}), not raw strings —
+    # field-tested 2026-07: raw strings answer HTTP 400 on every call (a
+    # desktop run diagnosed it live with a curl A/B and patched its local
+    # cache; this is that fix, in the repo where it survives updates).
+    body = {"current_company_domains": [{"value": domain}],
+            "current_position_titles": [{"value": t} for t in titles],
             "limit": limit}
     if seniority:
-        body["current_position_seniority_level"] = seniority
+        body["current_position_seniority_level"] = [
+            {"value": s} for s in seniority]
     request = urllib.request.Request(
         os.environ.get("FULLENRICH_API_URL", DEFAULT_API_URL),
         data=json.dumps(body).encode("utf-8"),
@@ -112,9 +128,18 @@ def call_api(domain: str, titles: list, seniority: list | None,
                  "Content-Type": "application/json",
                  "User-Agent": "bricks-fullenrich-people"},
         method="POST")
-    LIMITER.acquire()
-    with urllib.request.urlopen(request, timeout=TIMEOUT) as response:
-        return json.load(response)
+    for attempt in (1, 2):
+        LIMITER.acquire()
+        try:
+            with urllib.request.urlopen(request, timeout=TIMEOUT) as response:
+                return json.load(response)
+        except urllib.error.HTTPError as exc:
+            # 429 = their limiter — one polite retry, then the row fails
+            # cleanly (an explicit --retry-failed pass picks it up).
+            if exc.code == 429 and attempt == 1:
+                time.sleep(RETRY_429_SLEEP)
+                continue
+            raise
 
 
 def accept(person: dict, domain: str) -> dict | None:
@@ -158,7 +183,9 @@ def fetch(row: dict, params: dict) -> dict:
                     continue
                 data = call_api(domain, wave, group.get("seniority"),
                                 min(max(cap * 3, 10), 25), key)
-                credits += int((data.get("metadata") or {}).get("credits") or 0)
+                # credits are FRACTIONAL (~0.25/search call) — int() silently
+                # truncated them to 0 and the receipts under-reported spend
+                credits += float((data.get("metadata") or {}).get("credits") or 0)
                 for person in data.get("people", []):
                     kept = accept(person, domain)
                     if kept is None:
@@ -178,11 +205,11 @@ def fetch(row: dict, params: dict) -> dict:
             people += found
     except (urllib.error.URLError, urllib.error.HTTPError, OSError,
             json.JSONDecodeError, ValueError) as exc:
-        return {"status": "failed", "rows": [], "credits": credits,
+        return {"status": "failed", "rows": [], "credits": round(credits, 2),
                 "error": f"api error: {exc}"}
 
     if not people:
-        return {"status": "not_found", "rows": [], "credits": credits,
+        return {"status": "not_found", "rows": [], "credits": round(credits, 2),
                 "evidence": f"aucune vague concluante · {credits} crédits"}
-    return {"status": "done", "rows": people, "credits": credits,
+    return {"status": "done", "rows": people, "credits": round(credits, 2),
             "evidence": " · ".join(notes) + f" · {credits} crédits"}

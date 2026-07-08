@@ -1,7 +1,7 @@
 {
   "name": "bricks",
   "description": "Bricks — open-source GTM engine. Workspace management, find, enrich and transform skills operating on a per-workspace SQLite database.",
-  "version": "0.22.2",
+  "version": "0.22.3",
   "mcpServers": "./.mcp.json",
   "author": {
     "name": "Rémi Lagorce & Robin Jehanno",

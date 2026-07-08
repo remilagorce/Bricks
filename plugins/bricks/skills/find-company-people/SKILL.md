@@ -79,6 +79,14 @@ per-company work deterministically:
      cascade to "growth marketer", never to "SDR" (different activity,
      different pain). The cascade exists because real titles rarely
      match the user's words; the boundary is the activity itself.
+   - **Waves speak the market's language.** On a non-English market,
+     the waves MUST mix English and local-language titles for the SAME
+     activity — FR example: « directeur médical » alongside "Chief
+     Medical Officer", « chef de projet études cliniques » alongside
+     "Clinical Project Manager" (field-tested: English-only keywords
+     silently excluded good French companies). Cheap by design: a later
+     wave only re-queries the companies earlier waves MISSED, and
+     `person_key` dedup never pays or inserts twice.
    - Several roles named by the user ("des SDR ET des growth engineers
      ET des CEO") = several GROUPS, each with its own waves, its own
      seniority codes (`Owner`, `Founder`, `C-level`, `VP`, `Head`,
