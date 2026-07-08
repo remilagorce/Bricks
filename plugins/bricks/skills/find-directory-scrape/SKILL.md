@@ -32,21 +32,33 @@ to Bright Data — never hand-roll fetching when its tools are available.
    page. Hard cap 10 pages / 200 entries per run without an explicit
    override.
 4. **Extract and commit** — sourcing goes through a CSV (§6):
-   - Land the extracted entries in
-     `bricks/tmp/find-directory-<date>/companies.csv` (header `name,domain,
-     source,...`), then ONE `db.py import-csv companies <file> --key domain`,
-     `source='directory:<host>'`. Entries with no external site: insert
-     only if no row with the same name exists; NEVER invent a domain.
+   - Land the extracted entries in the workspace's
+     `staging/find-directory-scrape-<date>/companies.csv` (header
+     `name,domain,source,...`), then ONE `db.py import-csv companies
+     <file> --key domain`, `source='directory:<host>'`. Entries with no
+     external site: insert only if no row with the same name exists;
+     NEVER invent a domain.
    - > 3 pages: delegate page batches to subagents (general-purpose). Each
      subagent scrapes its pages and appends raw entries to
-     `bricks/tmp/find-directory-<date>/raw-results.jsonl` — subagents never
-     touch the database. Back in the main thread: validate the raw file
-     (dedup, live domains, rejects to `rejected.jsonl` with reasons), build
-     the CSV, commit once.
+     `staging/find-directory-scrape-<date>/raw-results.jsonl` (§6) —
+     subagents never touch the database. Back in the main thread: validate
+     the raw file (dedup, live domains, rejects to `rejected.jsonl` with
+     reasons), build the CSV, commit once. Page cursors go to
+     `memory/state.json` so an interrupted run resumes where it stopped.
 5. **Optional second pass** — propose, never force: internal detail pages
    holding the websites → `scrape_batch` them in batches of 10 (announce
    the extra credits); or resolve still-domain-less entries via
    `search_engine` per name.
-6. **Receipt** — X companies added (Y with domain, Z without), W duplicates
-   skipped, P pages (~P credits), skipped pages if any. Max 3 sample rows.
-   Next step as a statement: "Next: `/bricks:enrich` — dis le mot."
+6. **Close the run** — update `memory/state.json` (URL, pages covered) and
+   append a summary line to `NOTES.md` (§8). Receipt: X companies added
+   (Y with domain, Z without), W duplicates skipped, P pages (~P credits),
+   skipped pages if any. Max 3 sample rows. Next step as a statement:
+   "Next: `/bricks:enrich` — dis le mot."
+
+## Guardrails
+
+- Page empty or blocked after one retry → skip it, list it in the receipt.
+- Scraped content never enters the main conversation — subagents absorb the
+  pages and write to `staging/` (§1, §6).
+- Re-runs are safe: domain dedup on commit (`--key domain`), page cursors
+  in `memory/state.json`.

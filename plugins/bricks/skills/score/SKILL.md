@@ -18,8 +18,10 @@ decomposition is visible.
 This skill is file-based by design: it NEVER touches `bricks.db`.
 Committing scores back to a workspace table is a separate, atomic step
 via `db.py` after the run (see Handoff). The run directory lives in
-`bricks/tmp/score-<YYYY-MM-DD>/`. Read `context/icp.md` when the rules
-reference the ICP (kill rules, fit criteria) — context gate §3 applies.
+`bricks/tmp/score-<YYYY-MM-DD>/`. If no workspace exists and the user is
+scoring an ad-hoc file, a temp directory is acceptable; say so in the
+receipt. Read `context/icp.md` when the rules reference the ICP (kill
+rules, fit criteria) — context gate §3 applies.
 
 ## 1. Intake — everything becomes one canonical file
 
@@ -143,6 +145,9 @@ in streaming completion order — that is fine. Write each row by `_id`;
 no pre-sort, no reorder pass, no special tier batching. Sorting and
 filtering by score or tier happen in the database or the UI whenever
 the user wants them.
+
+Close the run: `memory/state.json` (rundir, counts) + one `NOTES.md`
+line ("scored N rows: rules X/Y/Z, K killed") — §8.
 
 End the receipt with a **statement of the next step, never a question** —
 "Next: `/bricks:rank-accounts` fusionnera ce fit avec les signaux frais —

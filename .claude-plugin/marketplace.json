@@ -5,14 +5,14 @@
   },
   "metadata": {
     "description": "Bricks marketplace — the open-source GTM engine for Claude Code.",
-    "version": "0.3.0"
+    "version": "2.0.0"
   },
   "plugins": [
     {
       "name": "bricks",
       "source": "./plugins/bricks",
       "description": "Find, enrich and work B2B lead lists from Claude Code, backed by a per-workspace SQLite database.",
-      "version": "0.3.0"
+      "version": "2.0.0"
     }
   ]
 }

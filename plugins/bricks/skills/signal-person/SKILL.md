@@ -12,25 +12,36 @@ the photo, signals are the movie. Scans KNOWN contacts and writes dated,
 evidence-backed rows to a `signals` table: `job_change` (free, via
 FullEnrich), `new_post` (LinkedIn posts, per-record), `hiring`
 (segment-aware multi-source job sweep), `company_news` (Google News
-RSS). This brick covers public signals around the tracked people and
-their companies.
+RSS). Account-level product signals (usage) are out of scope — this
+brick covers public signals around the tracked people and their
+companies. Never logs into LinkedIn: public records and indexed
+content only.
 
 Column relay: contacts need `linkedin_url` for passes 1-2 (run
 `/bricks:enrich-person-profile` or `/bricks:enrich-buying-committee`
 first) and a resolvable company for pass 3. Scope: when a `tier` column
 exists (`/bricks:score`), default to tier A/B only; otherwise state the
-scope ("N contacts with a linkedin_url"). Paid passes follow §7:
-free/near-free passes run announced-but-unasked; real credit spend gets
-ONE grouped GO covering all passes of the run. Contacts of disqualified
-companies are never scanned. FullEnrich gates pass 1 only.
+scope ("N contacts with a linkedin_url"). Paid passes follow §7: below
+the big-spend threshold (default 50 credits) they run
+announced-but-unasked; above it, ONE grouped GO covers all passes of
+the run. Contacts of disqualified companies are never scanned — and
+kill-rule flags recorded in `memory/NOTES.md` / `state.json` exclude a
+company the same way until `/bricks:score`'s verdicts are in base.
+FullEnrich gates pass 1 only; a missing tool skips its pass and the
+receipt says so.
 
 ## Freshness semantics (what makes this brick re-runnable)
 
 Rows enter scope when `signal_status` is NULL/`pending` OR
 `signal_checked_at` is older than 7 days (the skill re-inits those to
-`pending`; the user can force a full re-scan). Every scanned row gets
-`signal_checked_at` stamped, found or not. Signals are append-only,
-deduped on `sig_key` — re-runs never duplicate a signal already seen.
+`pending`; the user can force a full re-scan). The window applies PER
+PASS: `memory/state.json` logs which passes each scan ran, and a pass
+that never ran on a row is always due — one pass's stamp never blocks
+another (field-tested: a morning job-change scan must not mute an
+afternoon hiring sweep). Claim rows `running` via `db.py claim` (§4).
+Every scanned row gets `signal_checked_at` stamped, found or not.
+Signals are append-only, deduped on `sig_key` — re-runs never duplicate
+a signal already seen.
 
 ## The passes (cheap first; each announced, each optional)
 
@@ -51,9 +62,11 @@ touch the session.
     touching that row: its identity columns stay FROZEN — they describe
     who the person was at THIS company, and rewriting them makes the
     table lie (field-tested: the Julia Levy fixture ended up "Account
-    manager @ PREDICTICE"). Never reset `profile_status` on a move. The
-    receipt says: thread dead at the old account, warm door open at the
-    new one — following the person there is the USER's call
+    manager @ PREDICTICE"). Never reset `profile_status` on a move.
+    Downstream, `/bricks:enrich-person-profile` and
+    `/bricks:write-outreach` exclude the row. The receipt says: thread
+    dead at the old account, warm door open at the new one — following
+    the person there is the USER's call
     (`/bricks:enrich-buying-committee` on that company if it is in
     scope).
   - **Promotion (same company)** → signal `job_change` ("promoted to
@@ -86,13 +99,15 @@ touch the session.
   dated, sourced offers — seconds, 0 credits, agencies pre-flagged.
   Escalate to Bright Data ONLY for companies the script cannot see
   (tech/scaleup on ATS or LinkedIn Jobs: ATS-direct SERP +
-  `web_data_linkedin_job_listings`; budget announced, cap 25 companies,
-  1-credit health control first — outage → built-in web search carries
-  the lane). NEVER date operators in queries. Every hit is VERIFIED by
-  reading the offer page (`scrape_as_markdown`): the employer must be
-  OUR company — recruitment agencies/ESN posting for unnamed clients are
-  excluded, stage/alternance excluded by default — and the posted date
-  must be readable. Signal `hiring`: open roles + what the offer reveals
+  `web_data_linkedin_job_listings`; budget announced §7, ~2-4 credits
+  per escalated company, cap 25 companies, 1-credit health control
+  first — outage → built-in web search carries the lane, same
+  discipline). NEVER date operators in queries (freshness is read on
+  the offer page). Every hit is VERIFIED by reading the offer page
+  (`scrape_as_markdown`): the employer must be OUR company —
+  recruitment agencies/ESN posting for unnamed clients are excluded,
+  stage/alternance excluded by default — and the posted date must be
+  readable. Signal `hiring`: open roles + what the offer reveals
   (tools, pain wording — "recrute 2 poseurs, surcroît d'activité"),
   `date` = posting date, `evidence_url` = the offer URL. Several
   relevant offers ≤ 60 days → say so in the summary (volume = stronger
@@ -110,8 +125,8 @@ touch the session.
   The script filters mechanically; the LLM judges RELEVANCE — homonyms
   are the trap (`name_in_title` helps, the call is judgment; an article
   about someone else's DUPIN is not a signal). Signal `company_news`
-  with the article URL. SERP escalation only when RSS is quiet AND the
-  account is tier A (announced, §7).
+  with the article URL. SERP escalation (~1 credit/query) only when RSS
+  is quiet AND the account is tier A (announced, §7).
 
 **Verification rule**: a signal without a source (FullEnrich record or
 URL) does not exist — never infer activity, never date-guess. All passes
@@ -154,25 +169,29 @@ hiring; board offers keep their full offer URL — distinct offers are
 distinct signals), `status='new'`, `detected_at`. On the contact:
 `last_signal` (one short human line for the table view),
 `signal_status`, `signal_checked_at`; on a company change additionally
-`left_company=1` (pass 1). At volume, group writes in batches of 5-8 —
-one `db.py` write per batch, never one per row: the per-row dispatch
-overhead is what makes runs feel slow.
+`left_company=1` (pass 1). At volume, group writes in batches of 5-8
+through the run dir (§1) — one `db.py` write per batch, never one per
+row: the per-row dispatch overhead is what makes runs feel slow.
 
 ## Volume mode
 
 Up to ~40 contacts, the main thread's parallel waves are the fast path —
 no subagents. Beyond ~40: batches of 5-8 per subagent, up to 10 in
 parallel; subagents append raw findings to
-`bricks/tmp/signals-<date>/raw.jsonl`; the main thread verifies (source
-URL present, dates sane, dedup) and commits via `db.py`. Paid passes
-announced before launching, per pass (§7).
+`bricks/tmp/signals-<date>/raw.jsonl` — never touching the database; the
+main thread verifies (source URL present, dates sane, dedup) and commits
+via `db.py`. Paid passes announced before launching, per pass (§7).
 
-## Receipt
+## Close the run
 
-"Signals: X job changes (F fresh / C context), Y hiring, Z posts, W news
-items. N contacts quiet (not_found). Moves: [names] — rows frozen
+`memory/state.json` (passes run, counts per kind, credits/records
+spent), one `memory/NOTES.md` line (§8), receipt: "Signals: X job
+changes (F fresh / C context), Y hiring, Z posts, W news items. N
+contacts quiet (not_found). Moves: [names] — rows frozen
 (`left_company=1`), follow-up at the new company is your call. FRESH
-signals are icebreaker material — next: `/bricks:write-outreach` on those
-contacts." Max 3 sample rows. The receipt ENDS the run — next steps are
-statements, never "veux-tu… ?" questions. Cadence: on-demand today; a
-scheduled headless run ("check les signaux") is the natural next step.
+signals are icebreaker material — next: `/bricks:write-outreach` on
+those contacts." Max 3 sample rows. The receipt ENDS the run — next
+steps are statements, never "veux-tu… ?" questions; a chain GO given
+upfront (several bricks authorized in one plan) flows to the next
+receipt without asking. Cadence: on-demand today; a scheduled headless
+run ("check les signaux") is the natural next step.

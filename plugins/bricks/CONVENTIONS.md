@@ -67,8 +67,10 @@ erases a bad run entirely (fields nulled, statuses reset, child rows removed).
 
 - **Sourcing** (any external fetch producing many rows) → land a CSV on disk
   (`staging/` in the workspace for raw or interruptible batches), then
-  `db.py import-csv <table> <file> --key <col>`. Never mass `--rows` JSON, and
-  never page bulk provider data through MCP replies — export CSV instead.
+  `db.py import-csv <table> <file> --key <col>`. Never mass `--rows` JSON
+  typed in the conversation (a script piping its output to `--rows -` via
+  stdin is fine — the mass stays out of the context), and never page bulk
+  provider data through MCP replies — export CSV instead.
 - **Enrichment** → either (A) pass-through data the user already has, written
   as-is (`import-csv`, or a small `modify`), or (B) computed per row through
   `runner.py` (steps and/or `--ai` → `agent.py`). One mode per run — never a
@@ -83,8 +85,9 @@ erases a bad run entirely (fields nulled, statuses reset, child rows removed).
   pattern `/bricks:<skill-directory-name>`.
 - Per-row work defaults to `haiku` — the strong model is for orchestration,
   not for 500 identical worker turns. Announce a batch's scope and worst-case
-  cost (rows × pages × credits) BEFORE committing it; big spends get ONE
-  explicit GO.
+  cost (rows × pages × credits) BEFORE committing it. Below the big-spend
+  threshold (default **50 credits**, adjustable by the user's word) →
+  announce and RUN; above → ONE explicit GO.
 - The engine runs on the Claude **subscription** by default (Agent SDK).
   `BRICKS_AGENT_TRANSPORT=api` switches to the Anthropic API (API credits) —
   needed where the SDK cannot run. Caution: an `ANTHROPIC_API_KEY` present in

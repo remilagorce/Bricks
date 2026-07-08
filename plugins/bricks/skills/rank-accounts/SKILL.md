@@ -98,10 +98,12 @@ live account from the current signals and freshness (no `pending/done`
 per row — it is a full recompute). Cheap and free, so re-run it after
 every signal pass.
 
-## Receipt
+## Close the run
 
-The band distribution (`now` / `week` / `nurture`), how many carry a
-`why_now`, the run's `elapsed_s`, and the top 3 as `name →
+`memory/state.json` (counts per band, `ranked_at`) + one `NOTES.md` line
+(§8). Receipt: the band distribution (`now` / `week` / `nurture`), how
+many carry a `why_now`, the run's `elapsed_s` (always relay the
+wall-time), and the top 3 as `name →
 priority_score/tier → why_now`. If `rank.py` reports `linkedByName > 0`
 or `orphanedSignals > 0`, SAY SO — a signal writer omitted `company_id`
 (the fallback recovered it by name, or dropped it): flag the brick to fix

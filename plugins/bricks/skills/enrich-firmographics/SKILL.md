@@ -10,31 +10,40 @@ workspace, §3 context gate — if `icp.md` kill rules map to size or
 country, flag matching rows in the receipt; disqualifying is
 `/bricks:score`'s job).
 
-Fills `employees`, `industry`, `naf`, `siren`, `city`, `executives` on
-company rows. Primary source: the official French company API
-(recherche-entreprises.api.gouv.fr) via `tools/providers/firmo.py` —
-free, no key, 7 req/s, impossible to block. Bright Data is surgical
-backup only; without it, ambiguous and non-French rows simply stay
-`pending` for a later pass — say so in the receipt.
+Fills `employees` (range string, e.g. "50-99"), `industry`, `naf`,
+`siren`, `city`, `executives` on company rows. Primary source: the
+official French company API (recherche-entreprises.api.gouv.fr) via
+`${CLAUDE_PLUGIN_ROOT}/tools/providers/firmo.py` — free, no key, 7
+req/s, impossible to block. Bright Data is surgical backup only; without
+it, ambiguous and non-French rows simply stay `pending` for a later pass
+— say so in the receipt. `executives` is a JSON list of {name, role}
+(statutory auditors excluded; `entity: true` marks corporate officers).
+API unreachable → `failed` (retryable), never switch to guessing.
 
 ## Pass 1 — the engine lane (free, deterministic, iron gate §5)
 
-One runner pipeline, the firmo step doing the per-row lookup:
+Initialize `firmo_status='pending'` on the rows in scope via `db.py`
+(§4), skipping disqualified rows, then run ONE runner pipeline — the
+firmo step does the per-row lookup:
 
 ```
-python3 "${CLAUDE_PLUGIN_ROOT}/tools/core/runner.py" --table companies \
+python3 "${CLAUDE_PLUGIN_ROOT}/tools/core/runner.py" run --table companies \
+  --status-col firmo_status --run-id firmo-<date> \
   --step "${CLAUDE_PLUGIN_ROOT}/tools/providers/firmo.py:step" \
-  --status-col firmo_status
+  --preview 10
 ```
 
-Preview (no `--commit`): first 10 rows computed, shown, NOTHING written.
-The step reads `name` (+ `hint`/`city`/`postal`/`domain`, and `siren`
-when already known — exact match, no ambiguity; a simplified-name retry
-runs automatically before declaring `none`) and returns
-`firmo_confidence: high | ambiguous | none` plus the columns. ONE GO →
-`--commit` on the whole scope (`--where` to skip disqualified rows).
-Statuses are the checkpoint; re-running resumes pending rows. The tool
-rate-limits itself under the API's 7 req/s.
+The preview WRITES the 10 pilot rows (tagged with the run-id) and
+streams each result as NDJSON on stderr — relay the lines live and have
+the user check them in `/bricks:interface`. The step reads `name` (+
+`hint`/`city`/`postal`/`domain`, and `siren` when already known — exact
+match, no ambiguity; a simplified-name retry runs automatically before
+declaring `none`) and returns `firmo_confidence: high | ambiguous |
+none` plus the columns. ONE explicit GO → the same command with
+`--commit` on the whole scope (`--where` for extra filters). Statuses
+are the checkpoint; re-running resumes pending rows; `runner.py rollback
+--manifest <run>.manifest.json` undoes a bad run. The tool rate-limits
+itself under the API's 7 req/s.
 
 **Group detection, two complementary signals** (flag in the receipt as
 kill-rule candidates when the ICP wants independents; never disqualify
@@ -42,7 +51,7 @@ without user confirmation):
 
 - `parent_company` set → directly controlled (e.g. président = a
   holding);
-- `company_category` is GE or ETI while local `employees` is small →
+- `company_category` is GE or ETI while local `employees` is small —
   INSEE computes the category at GROUP level: a "10-19 employees GE" is
   a subsidiary (e.g. traqfood → Mérieux NutriSciences). Confirm the
   parent with a quick web check before flagging by name.
@@ -55,29 +64,32 @@ behind the brand). Scrape ALL their legal pages in one `scrape_batch`
 call (`https://<domain>/mentions-legales` for each; misses retried via
 the footer link from the homepage, again batched). French sites must
 publish their SIREN/SIRET there. Extract them, write the found `siren`
-values onto the rows (`db.py modify --updates`, one batch), then re-run
-the SAME runner command — rows are re-eligible once their
-`firmo_status` is reset to `pending` in that same batch; the step's
-siren path returns exact records (keep the brand as `name`, store the
-legal identity in `legal_name`/`siren`). No SIREN found →
+values onto the rows AND reset their `firmo_status` to `pending` in the
+same `db.py modify --updates` batch, then re-run the SAME runner command
+— the step's siren path returns exact records (keep the brand as `name`,
+store the legal identity in `legal_name`/`siren`). No SIREN found →
 `firmo_status='not_found'`. Beyond ~40 such rows: subagent batches,
-findings to `bricks/tmp/firmo-<date>/pass2.jsonl` (they never touch the
-database), then commit via `db.py`.
+findings appended to `staging/firmo-<date>/pass2.jsonl` (they never
+touch the database), then commit via `db.py`. Announce Bright Data
+credits at volume (§7).
 
 ## Pass 3 — non-French or unmatched (`none`)
 
 Likely foreign or renamed companies. Skim the site (Bright Data, else
-WebFetch) and public LinkedIn results — all rows' fetches in one wave —
-for an employees estimate and industry; write them with
-`firmo_source='estimate'` so downstream skills know the grade. Never
-estimate `siren` or `executives` — official identifiers are real or
-absent. Nothing findable → `firmo_status='not_found'`.
+WebFetch) and public LinkedIn results — all rows' fetches in one wave
+(`scrape_batch` / parallel calls) — for an employees estimate and
+industry; write them with `firmo_source='estimate'` so downstream skills
+know the grade. Never estimate `siren` or `executives` — official
+identifiers are real or absent. Nothing findable →
+`firmo_status='not_found'`.
 
-## Receipt
+## Close the run
 
-"Firmographics: X done via official API (free), Y disambiguated via
-legal pages (~Y credits), Z estimated, W not_found. Kill-rule matches
-flagged: N rows under the size threshold." Max 3 sample rows.
+Update `memory/state.json` (counts per pass), one `NOTES.md` line,
+receipt: "Firmographics: X done via official API (free), Y disambiguated
+via legal pages (~Y credits), Z estimated, W not_found. Kill-rule
+matches flagged: N rows under the size threshold." Max 3 sample rows;
+pass-1 runs end with the rollback line.
 
 ## Notes for downstream bricks
 
@@ -88,3 +100,5 @@ flagged: N rows under the size threshold." Max 3 sample rows.
 - `employees` + `country` are the cheapest kill-rule columns: run this
   skill early, `/bricks:score`'s kill gate gets its early-stop material
   for free.
+- Rows already carrying a `siren` are re-looked-up exactly (no matching
+  ambiguity) — pass-2 outputs re-enter pass 1 cleanly.

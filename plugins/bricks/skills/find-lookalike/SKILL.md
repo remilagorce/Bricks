@@ -39,20 +39,24 @@ skill, present and future, can enrich them with a plain
    confirmation BEFORE searching — a wrong pattern times 50 candidates is
    expensive noise.
 3. **Search** — 3 to 5 lookalikes per seed, cap 50 per run (announce the
-   scope first, §7). Queries in the seed's language: "similar to <seed>",
-   "<sector> <geo> <positioning>", "alternatives à <seed>". More than 4
-   seeds: delegate seed batches to subagents that append candidates to
-   `bricks/tmp/find-lookalike-<date>/raw-results.jsonl` — subagents never
-   touch the database.
+   scope first; §7 money gate when Bright Data credits are involved).
+   Queries in the seed's language: "similar to <seed>", "<sector> <geo>
+   <positioning>", "alternatives à <seed>". More than 4 seeds: delegate
+   seed batches to subagents that append candidates to the workspace's
+   `staging/find-lookalike-<date>/raw-results.jsonl` (§6) — subagents
+   never touch the database.
 4. **Validate and commit** — from the raw file (or directly for small
    runs): keep only candidates with a real, live website; DROP any
    candidate whose domain belongs to a seed (customers never become
    prospects); then land the survivors as a CSV and `db.py import-csv
    companies <file> --key domain` (§6), `source='lookalike:<seed-domain>'`.
    The dedup-on-insert also protects seed rows from being overwritten.
-5. **Receipt** — Y seeds → X candidates (Z duplicates skipped), the
-   confirmed pattern in one line, max 3 sample rows. Next step as a
-   statement: "Next: `/bricks:enrich` sur les candidats — dis le mot."
+5. **Close the run** — update `memory/state.json` (seeds covered, queries
+   used) and append the confirmed pattern as one line to `NOTES.md` (§8).
+   Receipt: Y seeds → X candidates (Z duplicates skipped), the pattern in
+   one line, max 3 sample rows. Next step as a statement: "Next:
+   `/bricks:enrich` sur les candidats — dis le mot" (or the discriminating
+   signal filter when running inside `/bricks:playbook-lookalike`).
 
 ## Guardrails
 

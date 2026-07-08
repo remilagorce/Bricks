@@ -1,6 +1,5 @@
 ---
 name: gtm-onboard
-family: core
 description: Entry point and router for the modular GTM engine. Discovers a falsifiable v1 ICP by inferring first and questioning second, then hands the finished profile to context-write (and to workspace when a new one is needed). Use at the first GTM interaction on a project — "je veux lancer un GTM sur X", "aide-moi à définir mon ICP", "je vends Y à Z", "lance mon outbound", or an empty / vague opening. Trigger broadly: better to over-trigger onboarding than to miss it.
 ---
 
@@ -15,8 +14,10 @@ one falsifiable v1 ICP conforming to the schema.
 It never writes the context itself. When the profile is filled and
 challenged, it delegates:
 
-- to **context-write** (sister skill, not user-invocable) to persist the ICP;
-- to **workspace** (sister skill) when a brand-new workspace is warranted.
+- to `/bricks:context-write` (sister skill, not user-invocable) to persist
+  the ICP;
+- to `/bricks:workspace` (sister skill) when a brand-new workspace is
+  warranted.
 
 The ICP it produces is always a **v1 hypothesis**, never "the right ICP" —
 downstream bricks (outreach, ads) are what raise its confidence.
@@ -63,10 +64,12 @@ confirmation question — never decide unilaterally. Example: *"Ça ressemble
 à un projet différent de ton workspace actuel (autre secteur, autre cible).
 Je te crée un nouveau workspace dédié, ou on reste ici ?"*
 
-**Workspace handoff (case D, user says yes).** Hand off to the `workspace`
-skill to create a `new <name> --goal "..."`. Display the returned banner +
+**Workspace handoff (case D, user says yes).** Hand off to
+`/bricks:workspace` to create a `new <name> --goal "<the user's objective,
+one line>"`. Display the returned banner +
 welcome line VERBATIM (CONVENTIONS §2), then resume at Phase 1 inside the
-fresh workspace (mode `append`, first ICP).
+fresh workspace (mode `append`, first ICP) — the project the user described
+is Phase 1's raw material.
 
 ## Phase 1 — Discovery
 
@@ -111,15 +114,21 @@ banks (3-4 per dimension) live in
 
 ## Phase 3 — Handoff to context-write
 
-Schema filled and challenged → call **context-write**, handing it:
+Schema filled and challenged → call `/bricks:context-write`, handing it:
 
 1. the complete ICP object (per the schema);
 2. the **mode** — `overwrite` with the target ICP id, or `append`;
-3. the **id of the current workspace** (from `workspace.py status`).
+3. the **id of the current workspace** (from `workspace.py status`);
+4. the **buying committee** — every persona the Phase 2 persona challenge
+   surfaced (decision-maker + champion + any end-user / DG / office-manager
+   layer), so context-write persists one persona file each. If you presented
+   a multi-persona committee in the conversation, ALL of it goes here — do
+   not let it evaporate into a single persona file.
 
 Do not write the context yourself. Relay context-write's receipt to the
-user, and state plainly that this is a **v1 falsifiable ICP** — the next
-bricks (find → enrich → outreach) are what will validate or kill it.
+user (ICP fields + personas persisted), and state plainly that this is a
+**v1 falsifiable ICP** — the next bricks (find → enrich → outreach) are what
+will validate or kill it.
 
 ## Transversal rules (always)
 

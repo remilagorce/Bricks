@@ -46,16 +46,17 @@ clean empty state, which is fine if the user just wants to look around.
 
    > Your table is live — click here: **http://127.0.0.1:4321**
 
-   Mention that rows can be selected and deleted from the UI, that the page
-   auto-refreshes as skills write new data, and that the ⚙ button manages the
-   engine's API keys (stored in `~/.bricks/env`, values always masked). When a
-   run fails on a missing key, that panel is the friendly fix.
+   Mention that rows can be selected with the checkboxes and deleted from the
+   UI, that the page auto-refreshes as skills write new data, and that the ⚙
+   button (topbar) manages the engine's API keys — stored in `~/.bricks/env`,
+   values always masked. When a run fails on a missing key, pointing the user
+   to that panel is the friendly fix.
 
 ## Rules
 
 - Leave the server running at the end of the turn — it is the point.
 - To stop it: find the background task or `pkill -f "front/server.py"`.
-- The UI loads React from a CDN — it needs an internet connection the first
-  time; offline, the page will not render.
+- The UI loads React from esm.sh (CDN) — it needs an internet connection the
+  first time; offline, the page will not render.
 - Never touch the database outside `db.py` to "help" the UI — it re-reads
-  `bricks.db` on every poll.
+  `bricks.db` on every poll (every 4 s).

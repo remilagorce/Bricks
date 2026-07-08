@@ -1,2 +1,5 @@
-# docs only — the plugin itself is stdlib + claude-agent-sdk
+# Docs site only — mkdocs. The plugin itself is stdlib, plus:
+#   claude-agent-sdk  (engine AI lane, Python >= 3.10 — subscription billing)
+#   anthropic         (only for BRICKS_AGENT_TRANSPORT=api — API billing)
+# pip3 install --user claude-agent-sdk anthropic
 mkdocs-material

@@ -47,8 +47,8 @@ columns) and their `signals`. The opener is chosen in this order:
 signal into one trigger line, `why_now_url` its evidence; it supersedes
 and generalizes `hiring_angle` (still honored when `why_now` is absent).
 Otherwise fresh `signals` directly: only `freshness='fresh'` rows
-(re-check `date`) may be treated as news; `context` signals are
-background, never congratulated. An empty `why_now` (a no-signal
+(≤ 60 days — re-check `date`) may be treated as news; `context` signals
+are background, never congratulated. An empty `why_now` (a no-signal
 account) is not a gap — fall back to the persona's pain point, never
 fabricate a trigger.
 
@@ -83,20 +83,23 @@ fabricate a trigger.
 Templates come from `strategy.md`. Defaults: combined lane = invite J0 →
 email J+2 → follow-up email J+5 → DM J+7 → breakup email J+10;
 email-only = J0 / +3 / +7 (the historic sequence); linkedin-only =
-invite J0 → DM J+2 → 2 relances (value, then soft close). Batches of 5
-contacts; store as each batch completes — ONE `db.py add messages
---rows '[...]' --key msg_key` per batch of 5, never one write per
-contact and never the whole run at the end: one `messages` row per step
-— `contact_id`, `channel` = `email` | `linkedin-invite` | `linkedin-dm`,
-`step`, `send_day`, `subject` (email only), `body`, `status='draft'`,
+invite J0 → DM J+2 → 2 relances (value, then soft close). Work by
+batches of 5 contacts: claim them `running` first (`db.py claim contacts
+sequence_status --limit 5 --where "<work-list conditions>"`, §4), store
+as each batch completes — ONE `db.py add messages --rows '[...]' --key
+msg_key` per batch of 5, never one write per contact and never the whole
+run at the end: one `messages` row per step — `contact_id`, `channel` =
+`email` | `linkedin-invite` | `linkedin-dm`, `step`, `send_day`,
+`subject` (email only), `body`, `status='draft'`,
 `msg_key='<contact_id>-<channel>-<step>'` (idempotent re-runs) — then
-`sequence_status='done'` on the contact. Language: the company's, else
-the offer's.
+`sequence_status='done'` on the contact (`failed` if its drafting
+failed — retryable). Language: the company's, else the offer's.
 
 ## Receipt
 
 "X contacts → Y drafts (A email, B LinkedIn) ; Z lanes skipped (missing
-prerequisite, named). Nothing sent — email drafts await human approval;
-LinkedIn drafts are yours to copy-paste, automated LinkedIn sending
-stays out by doctrine." Show ONE full example sequence — one, not all.
-Statements, never questions.
+prerequisite, named). Nothing sent — email drafts await human approval
+(→ outreach-send when it ships); LinkedIn drafts are yours to
+copy-paste, automated LinkedIn sending stays out by doctrine." Never set
+`approved` yourself — approval is a human act. Show ONE full example
+sequence — one, not all. Statements, never questions.

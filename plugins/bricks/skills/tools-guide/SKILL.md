@@ -37,14 +37,15 @@ subcommand.
 
 | Command | Purpose |
 |---|---|
-| `status` | Current workspace, db path, tables, context files |
+| `status` | Current workspace (+ goal), db path, tables, context files |
 | `list` | All workspaces + which is current |
-| `new <name>` | Create workspace (copies `context/` templates, inits db, switches to it) |
+| `new <name> [--goal "…"]` | Create workspace (copies `context/` templates, inits db, switches to it; the goal shows in `status` and the session banner) |
 | `switch <name>` | Point `config.json` at another workspace |
+| `init` | Create the Bricks root without a workspace (rare — `new` does it for you) |
 
 ```bash
 python3 "${CLAUDE_PLUGIN_ROOT}/tools/core/workspace.py" status
-python3 "${CLAUDE_PLUGIN_ROOT}/tools/core/workspace.py" new acme-outbound
+python3 "${CLAUDE_PLUGIN_ROOT}/tools/core/workspace.py" new acme-outbound --goal "vendre X aux PME Y"
 ```
 
 **When to use:** always run `status` before any GTM work. Never edit

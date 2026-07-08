@@ -5,41 +5,59 @@ description: Find companies and contacts matching an ICP and write them into the
 
 # Find — source companies & contacts
 
-**Before anything, read `${CLAUDE_PLUGIN_ROOT}/CONVENTIONS.md`** — the shared
-contract every skill obeys (workspace, context gate, the only door, the iron
-gate). The gates below are the find-specific application of it.
+Read `${CLAUDE_PLUGIN_ROOT}/CONVENTIONS.md` first — §2 (workspace), §3
+(context gate), §6 (sourcing lands as CSV), §7 (cost gate). The steps below
+are the find-specific application.
 
-## Gates (before anything)
+## Gates
 
-1. `python3 "${CLAUDE_PLUGIN_ROOT}/tools/core/workspace.py" status` — if there is
-   no current workspace, create one named after the search:
-   `python3 "${CLAUDE_PLUGIN_ROOT}/tools/core/workspace.py" new <slug>`.
-2. Read `context/offer.md` and `context/icp.md` in the workspace. If the request
-   contradicts them, STOP and ask (switch workspace, new workspace, or update
-   the context).
-3. If `icp.md` is still empty (TODO placeholders) or the request has no
-   targeting criteria → invoke `/bricks:gtm-onboard` in a subagent before
-   continuing. Do not source leads until the ICP exists. If the gate has
-   targeting criteria but nothing in `icp.md`, complete `icp.md` with the
-   inferred ICP.
+1. Workspace per §2. If `icp.md` is still TODO and the request has no
+   targeting criteria → `/bricks:gtm-onboard` before sourcing. If the request
+   HAS criteria but `icp.md` is empty, offer to write them in.
+2. A previous find run may be resumable — check `memory/state.json` and
+   `memory/NOTES.md` (§8) before starting over.
 
 ## Workflow
 
-1. **Target** — make the criteria explicit (industry, geography, size...);
-   default to what `icp.md` says. Default is for company but people if explicitly mentionned. 
-2. **Source**, in this order:
-   - **FullEnrich MCP** (`mcp__fullenrich__*` tools) for firmographic segments:
-     `search_companies` as a preview (10 results + total), always print the preview and format it to the user as a table with all the information from the MCP. Also print the the request term in a human comprehensible natural language. Confirm the volume and the preview before the next part.
-     with the user, then `export_companies` → download the CSV → import:
-     `python3 "${CLAUDE_PLUGIN_ROOT}/tools/core/db.py" import-csv companies <file.csv> --key domain`
-     If the MCP tools are missing, say it once (`/mcp` → fullenrich) and fall back.
-   - todo : Alternative methode in skills (write the skills)
-3. **Write** — save the sourced rows to a temp CSV, then import with the file
-   as a positional argument (never raw SQL, never fabricated data, never mass
-   JSON in the conversation):
-   `python3 "${CLAUDE_PLUGIN_ROOT}/tools/core/db.py" import-csv companies <file.csv> --key domain`
-   Standard columns — companies: `name`, `domain`, `source`; contacts:
-   `company_id`, `full_name`, `role`, `email`, `linkedin_url`, `source`.
-4. **Receipt** — tell the user how many were found / skipped as duplicates,
-   show at most 3 sample rows. The mass lives in the database, never in the
-   conversation.
+1. **Target** — make the criteria explicit (industry, geography, size,
+   signals); default to what `context/icp.md` says. Companies by default;
+   people only if explicitly asked. Write the agreed criteria to
+   `memory/NOTES.md` so later runs (and `/bricks:enrich`) know the intent.
+
+2. **Source** — in priority order; state in the receipt which source was
+   used and why:
+   1. **FullEnrich MCP** (`mcp__fullenrich__*` tools) when the target is a
+      firmographic segment (industry, size, geography, titles).
+      `search_companies` gives a free preview (10 results + total count):
+      **render that preview to the user as a readable table** with the MCP's
+      information, **and restate the interpreted query in plain language**
+      («PME françaises 50-250 salariés, secteur logiciel…»). Confirm the
+      preview AND the export volume (§7) before going further. Then
+      `export_companies` → download the CSV → `staging/` →
+      `db.py import-csv companies <file.csv> --key domain`. Volume flows by
+      FILE, never through MCP replies (§6). If the MCP tools are missing,
+      say it once («run `/mcp` → fullenrich to unlock the B2B database») and
+      fall back — never silently skip it.
+   2. **Bright Data** (`search_engine`, or `/bricks:find-directory-scrape`
+      for listing pages) when the target is niche/local commerce that B2B
+      databases cover poorly.
+   3. **Built-in web search** as the last resort — verify every domain.
+
+   Small runs (≲50 results, single session): collect and commit directly.
+   Large or interruptible runs: append raw batches to
+   `staging/find-<YYYY-MM-DD>/raw-results.jsonl` and keep source cursors in
+   `memory/state.json` (§8) — never write half-validated rows to the
+   database, that is what `staging/` is for.
+
+3. **Write** — validate, then import deduped:
+   `db.py import-csv companies <file.csv> --key domain` (contacts: `--key
+   email`). Standard columns — companies: `name, domain, source, status`
+   ("new") ; contacts: `company_id` (the company's `_id`), `full_name, role,
+   email, linkedin_url, source, status`. Criteria-specific columns are
+   welcome — `db.py` creates them on the fly. Never fabricated data, never
+   mass `--rows` JSON.
+
+4. **Close** — update `memory/state.json` (sources covered, counts), append
+   a summary line to `NOTES.md`, then the receipt: how many found, how many
+   duplicates skipped, how many rejected and why, which table. Max 3 sample
+   rows — the mass lives in the database (§1).

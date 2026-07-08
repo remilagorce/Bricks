@@ -38,19 +38,27 @@ Read `context/offer.md`, `context/icp.md` (Buying roles section) and
   labeled). Default: none.
 
 Present the plan in 5-6 lines, get explicit confirmation, persist it to
-`<workspace>/context/targeting-plan.json`. Re-runs reuse it silently;
-re-ask only if `context/` changed. One exception: when the user already
-dictated the doctrine verbatim in `context/icp.md` ("Décideur type : le
-gérant"), restate the plan and proceed without blocking — their context
-IS the confirmation.
+`<workspace>/context/targeting-plan.json` and append one line to
+`memory/NOTES.md` (§8). Re-runs reuse it silently; re-ask only if
+`context/` changed. One exception: when the user already dictated the
+doctrine verbatim in `context/icp.md` ("Décideur type : le gérant"),
+restate the plan and proceed without blocking — their context IS the
+confirmation.
 
 ## Phase 1 — The waterfall, in waves (one rung × whole batch, cheap first, verified always)
 
-Select companies with `committee_status` NULL or `pending`, skipping
-disqualified rows. Run the rungs as WAVES across the whole batch, never
-as per-company waterfalls: wave A on every company at once, wave B only
-on A's unresolved companies, and so on — a company resolved in one wave
-never enters the next. Within a wave, all calls fire IN PARALLEL in one
+Scope and claim via `db.py` (§4): initialize `committee_status='pending'`
+on rows in scope, then `db.py claim companies committee_status` —
+claimed rows are atomically marked `running`. **Kill-rule rows**:
+companies flagged by a kill rule are EXCLUDED FROM SCOPE (they never
+enter the claim), their `committee_status` stays `pending` — never
+invent status values outside the shared vocabulary (§4); disqualifying
+is `/bricks:score`'s (or the user's) call.
+
+Run the rungs as WAVES across the whole batch, never as per-company
+waterfalls: wave A on every company at once, wave B only on A's
+unresolved companies, and so on — a company resolved in one wave never
+enters the next. Within a wave, all calls fire IN PARALLEL in one
 message; prefer the batch tool variant (`search_engine_batch`,
 `scrape_batch`) when several companies need the same rung.
 Stop-at-first-verified-hit still holds per company — it just happens
@@ -87,19 +95,58 @@ C/B gives it), `source` (`registry` | `fullenrich-search` |
 `committee_status='done'`. One contact per company (the plan's type),
 duplicates checked on (company_id + full_name).
 
-## Volume mode
+## Volume mode — the ENGINE lane (≳40 companies)
 
 Up to ~40 companies, the main thread's parallel waves are the fast path
-— no subagents (each one is a cold start). Beyond ~40: batches of 5-8
-per subagent, up to 10 in parallel; subagents run rungs B-D as waves and
-append candidates to `bricks/tmp/committee-<date>/candidates.jsonl`
-(never touching the database); the main thread verifies and commits via
-`db.py`. Announce SERP credit usage before launching (§7).
+— no subagents (each one is a cold start). **Beyond ~40, the volume path
+is THE ENGINE (§5, §6), not session subagents.** Compile
+`prompts/committee/params.json` in the workspace ONCE — one group per
+role type in the targeting plan (decision-maker group THEN champion
+group), `title_waves` = strict synonyms of the SAME activity, `cap` 1-2
+since this brick picks ONE door per company — then run the FullEnrich
+provider step (reads each row's `domain`; needs `FULLENRICH_API_KEY`):
 
-## Receipt
+```
+python3 "${CLAUDE_PLUGIN_ROOT}/tools/core/runner.py" run --table companies \
+  --status-col committee_status --run-id committee-<date> \
+  --step "${CLAUDE_PLUGIN_ROOT}/tools/providers/fullenrich.py:step {\"params\":\"<workspace abs>/prompts/committee/params.json\",\"out_table\":\"contacts\"}" \
+  --out-table contacts --preview 10
+```
 
-"Contacts: X via registry (free), Y via FullEnrich search (free), Z via
-LinkedIn SERP (~Z credits), W via team pages. N not_found (fallback:
-<rule>). Group-owned companies skipped registry: [names]." Max 3 sample
-contacts. Next step as a statement: "Next: `/bricks:enrich` (emails) sur
-les nouveaux contacts, puis `/bricks:write-outreach` — dis le mot."
+The preview WRITES the 10 pilot rows (tagged with the run-id) and
+streams each result as NDJSON on stderr — relay the lines to the user
+live, have them check the new contacts in `/bricks:interface`, get ONE
+explicit GO, then the same command with `--commit`. Deterministic HTTP
+in pure Python, ~0.25 credit per search call (real cost shown by the
+receipt — announce it before launching, money gate §7), 429-throttled;
+child contacts rows are tagged `source_run` and deduped on
+`linkedin_url`; `runner.py rollback --manifest <run>.manifest.json`
+undoes the whole run.
+
+Field-tested on a 283-company run: 12 session subagents doing LinkedIn
+SERP died when the Bright Data session connector rejected credentials
+after a handful of calls (found contacts lost with them); the engine
+lane then covered the whole base for ~34 credits. Session subagent
+batches remain ONLY as the no-API-key fallback, and their found contacts
+are appended to `staging/committee-<date>/candidates.jsonl` AS THEY LAND
+(iron rule — a killed subagent must not take its findings with it); the
+main thread verifies and commits via `db.py`.
+
+**Title waves speak the market's language.** On a non-English market,
+every group's waves MUST mix English and local-language titles — e.g.
+FR: « directeur médical » alongside "Chief Medical Officer", « chef de
+projet études cliniques » alongside "Clinical Project Manager"
+(field-tested: English-only keywords silently excluded good French
+companies). The cascade makes this cheap: a later wave only re-queries
+the companies the earlier waves MISSED, and dedup never pays or inserts
+the same company/person twice.
+
+## Close the run
+
+Update `memory/state.json` (counts per rung), one `NOTES.md` line,
+receipt: "Contacts: X via registry (free), Y via FullEnrich search
+(free), Z via LinkedIn SERP (~Z credits), W via team pages. N not_found
+(fallback: <rule>). Group-owned companies skipped registry: [names]."
+Max 3 sample contacts; engine runs end with the rollback line. Next step
+as a statement: "Next: `/bricks:enrich` (emails) sur les nouveaux
+contacts, puis `/bricks:write-outreach` — dis le mot."

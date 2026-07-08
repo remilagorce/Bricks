@@ -68,7 +68,8 @@ WebFetch, static pages only — their call.
 - Page empty or blocked after one retry: skip it, continue; mention skipped
   pages only if they were likely to hold the answer.
 - No files written, no raw page content in the conversation, no report
-  structure — one short paragraph, evidence woven in, the cost line at the
-  end. That's the whole output.
+  structure (no headers, no per-category sections, no bullet dump) — one
+  short paragraph, evidence woven in, the cost line at the end. That's
+  the whole output.
 - Scanning MANY sites with the same question is not this skill — that is
   `/bricks:enrich` mode B (one runner pipeline, web on).

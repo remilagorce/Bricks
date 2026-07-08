@@ -17,7 +17,8 @@ bus.
 
 HARD gate: `context/offer.md` + `icp.md` + `personas/` filled (TODO → run
 `/bricks:gtm-onboard` first). Then read the EVIDENCE from the base via
-`db.py select` (§4 — use the receipts' `matching` counts, never dumps):
+`db.py select`/`count` (§4 — use the receipts' `matching` counts, never
+dumps):
 company sizes and sectors (firmo), `tier` distribution (score run?
 absent → the strategy is uniform-degraded and SAYS SO, recommending
 `/bricks:score` first), fresh signals (hiring, news, job changes), and
@@ -77,7 +78,11 @@ wave, a channel's coverage doubling).
   DISQUALIFIED companies and `left_company` rows get NO channel_plan —
   excluded at assignment time, not caught downstream (field-tested: a
   disqualified GE's contact got a plan and write-outreach had to
-  intercept it).
+  intercept it). Zero contacts is not an error: the strategy is still
+  produced for the sourcing phase, channel assignment deferred (nothing
+  to assign).
+- **`memory/state.json`** (`outreach_strategy` summary) + one `NOTES.md`
+  line (§8).
 
 Receipt: the channel_plan distribution + the strategy in 5 lines + the
 next step as a statement ("Next: `/bricks:write-outreach` — dis le

@@ -23,24 +23,32 @@ if disconnected, rung A is skipped and the receipt says so.
 
 ## The waterfall, in waves (one rung × whole batch, cheap first, stop at first VERIFIED hit)
 
-Select contacts with `profile_status` NULL or `pending` whose company is
-not disqualified. Rows with `left_company=1` (`/bricks:signal-person`'s
-verdict: the person moved to another company) are out of scope — their
-identity columns describe who the person was at THIS company and stay
-frozen. Execution is by WAVES, never per contact: rung A fires for ALL
-contacts in scope in one parallel message (or one batch call), rung B
-only for A's misses, rung C for B's misses — a contact verified in one
-wave never enters the next. Stop-at-first-hit holds per contact, between
-waves.
+Scope: contacts whose company is not disqualified — and not
+kill-rule-flagged either: kill flags recorded in `memory/NOTES.md` /
+`state.json` (or in a find/firmo receipt) count as OUT OF SCOPE even
+while `status='new'`. Never claim-then-revert a flagged row; it simply
+never enters the claim. Rows with `left_company=1`
+(`/bricks:signal-person`'s verdict: the person moved to another company)
+are out of scope too — their identity columns describe who the person
+was at THIS company and stay frozen. Initialize
+`profile_status='pending'` on rows in scope, then claim via `db.py claim
+contacts profile_status` (§4) — claimed rows are atomically marked
+`running`.
+
+Execution is by WAVES, never per contact: rung A fires for ALL contacts
+in scope in one parallel message (or one batch call), rung B only for
+A's misses, rung C for B's misses — a contact verified in one wave never
+enters the next. Stop-at-first-hit holds per contact, between waves.
 
 **Budget once, up front (§7)**: count the rows that could reach rungs
 B/C ("up to N contacts × 2 SERP queries → max ~2N credits"), flag the
-low-prior rows (see rung B). Free-only runs need no confirmation —
-announce and proceed; real credit spend gets ONE confirmation for the
-whole batch, then never re-ask per contact. Chain GO: when this brick
-runs as a step the user already authorized in a multi-brick plan, its
-budget line was announced there — do not re-ask. The receipt ends with
-statements, never questions.
+low-prior rows (see rung B). Worst case below the big-spend threshold
+(default 50 credits) → announce and PROCEED, no question; above it → ONE
+confirmation for the whole batch — then never re-ask per contact. Rung A
+alone (free) needs nothing. Chain GO: when this brick runs as a step the
+user already authorized in a multi-brick plan, its budget line was
+announced there — do not re-ask. The receipt ends with statements, never
+questions.
 
 - **A. FullEnrich people search (free — searches cost 0 credits)** —
   search `person_names` = full_name + `current_company_domains` (or
@@ -106,16 +114,19 @@ adding people is `/bricks:enrich-buying-committee`'s job.
 ## Volume mode
 
 Up to ~40 contacts, the main thread's parallel waves are the fast path —
-no subagents. Beyond ~40: batches of 5-8 per subagent, up to 10 in
-parallel; subagents run rungs A-C as waves and append candidates to
-`bricks/tmp/profile-<date>/candidates.jsonl` (never touching the
-database); the main thread verifies and commits via `db.py`. The single
-upfront budget announcement covers the whole run — subagents never spend
-beyond it.
+no subagents (each one is a cold start). Beyond ~40: batches of 5-8 per
+subagent, up to 10 in parallel; subagents run rungs A-C as waves and
+append candidates to `staging/profile-<date>/candidates.jsonl` AS THEY
+LAND (never touching the database — a killed subagent must not take its
+findings with it); the main thread verifies and commits via `db.py`. The
+single upfront budget announcement covers the whole run — subagents
+never spend beyond it.
 
-## Receipt
+## Close the run
 
-"Profiles: X via FullEnrich search (free), Y via LinkedIn SERP (~Y
-credits), Z via team/press pages. N not_found." Max 3 sample rows. Next
-steps as statements: `/bricks:enrich` (emails) → `/bricks:write-outreach`;
-`/bricks:signal-person` can now watch the new `linkedin_url` rows.
+Update `memory/state.json` (counts per rung), one `NOTES.md` line,
+receipt: "Profiles: X via FullEnrich search (free), Y via LinkedIn SERP
+(~Y credits), Z via team/press pages. N not_found." Max 3 sample rows.
+Next steps as statements: `/bricks:enrich` (emails) →
+`/bricks:write-outreach`; `/bricks:signal-person` can now watch the new
+`linkedin_url` rows.

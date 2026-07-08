@@ -1,6 +1,5 @@
 ---
 name: create-landing-page
-family: transform
 description: Génère une landing page HTML premium à partir du contexte workspace (offre, ICP, personas) — sans interview — puis la déploie sur Vercel (via GitHub) sur un domaine générique. "Crée une landing page", "landing pour mon offre", "page produit", "one-pager web", "déploie ma landing".
 ---
 
@@ -18,7 +17,7 @@ Never writes to `bricks.db`.
 
 Follow `${CLAUDE_PLUGIN_ROOT}/CONVENTIONS.md` §2 and §3:
 
-1. `python3 "${CLAUDE_PLUGIN_ROOT}/tools/workspace.py" status` — init or
+1. `python3 "${CLAUDE_PLUGIN_ROOT}/tools/core/workspace.py" status` — init or
    switch as needed.
 2. Read the current workspace's offer, ICP, and every file under
    personas/. Talk about their *content*, never their file names.

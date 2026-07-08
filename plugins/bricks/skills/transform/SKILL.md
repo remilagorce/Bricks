@@ -16,7 +16,9 @@ gate). Zero external fetch: a transform only reads and writes `bricks.db`.
    first).
 2. `python3 "${CLAUDE_PLUGIN_ROOT}/tools/core/db.py" schema <table>` + a
    `select --limit 5` for the shape, and state what you see. Read
-   `context/icp.md` when the transform encodes intent (kill rules, segments).
+   `context/icp.md` and `memory/NOTES.md` for the workspace's intent —
+   most transforms (kill rules, segments, filters) depend on them; the
+   context gate (§3) applies if the request contradicts the context.
 3. Confirm with the user if the transformation is destructive (deleting rows,
    overwriting a column).
 
@@ -44,7 +46,9 @@ Prefer new columns over destroyed data — e.g. write `domain_normalized`
 next to `domain` rather than overwriting, unless the user explicitly wants
 in-place cleanup.
 
-## Receipt
+## Close the run
 
-Report before/after counts ("deduplicated companies on domain: 50 → 43
-rows") — receipts, never raw table dumps in the conversation.
+Update `memory/state.json` and append one `NOTES.md` line saying what
+was transformed and why (§8). Report before/after counts ("deduplicated
+companies on domain: 50 → 43 rows") — receipts, never raw table dumps
+in the conversation.
