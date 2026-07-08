@@ -94,9 +94,27 @@ NAME_AGENCY_TOKENS = [
     # run were cabinets named with these — Voluntae-style opaque brands are
     # caught by the offer-text lane in curate.py, not here): word-boundary,
     # so "Talentsoft" or "électricité" never fire.
-    "talent", "talents", "ressources", "people", "executive", "rh",
+    "talent", "talents", "ressources", "people", "executive", "rh", "hr",
     "recrute", "super recruteur", "staffing", "headhunting", "hunting",
     "search partners", "emploi",
+]
+
+#: KNOWN_STAFFING_BRANDS — the CUMULATIVE memory of the field-test loop,
+#: plugin-level. Every opaque-brand cabinet UNMASKED by an identity check
+#: (web-verified "this is a recruiting/expertise-comptable firm") gets
+#: appended here, so the knowledge survives across workspaces — the
+#: per-workspace exclude_employers learning evaporates on every fresh
+#: workspace, and the SAME brands (Voluntae, three runs in a row) were
+#: being re-verified at ~1 web check each, every run. Name-only matching,
+#: word-boundary. Append freely: a false positive lands in rejected.jsonl
+#: with its reason, visible and re-addable by hand.
+KNOWN_STAFFING_BRANDS = [
+    # web-verified across field runs 2026-07 (hiring-test b/c/f/h):
+    "voluntae", "noviac", "huca group", "wiico", "adsearch",
+    "vidal associates", "s you", "nextep", "kalixens", "altitude finance",
+    "keyman", "cabrh", "timtargett", "jobmania", "humanae", "humanup",
+    "raisehup", "team is", "emade conseil", "morgan philips", "fmi",
+    "hermesiane", "tyls", "financepeople", "comptaforces",
 ]
 STAGE_RE = re.compile(r"\b(stage|stagiaire|alternan\w*|apprenti\w*)\b", re.I)
 CONTRACT_RE = re.compile(
@@ -223,7 +241,7 @@ def agency_suspect(company, title, extra_negative):
         if t and f" {t} " in hay:
             return token.strip()
     name_hay = " " + norm(company) + " "
-    for token in NAME_AGENCY_TOKENS:
+    for token in NAME_AGENCY_TOKENS + KNOWN_STAFFING_BRANDS:
         t = norm(token)
         if t and f" {t} " in name_hay:
             return token.strip()

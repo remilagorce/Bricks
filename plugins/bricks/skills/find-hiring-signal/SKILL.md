@@ -62,13 +62,19 @@ the chain before that brick, saying what is missing. Persist to
 `memory/state.json` (`hiring_matrix`) + one NOTES.md line; re-runs
 reuse it silently and re-ask only if `context/` changed.
 
-**Self-healing exclusions.** When compiling the matrix, fold the
-workspace's kill flags into it: every intermediary unmasked by ANY
-brick downstream (signal-person, enrich, a manual kill) is recorded in
-`memory/` (state.json kill flags / NOTES.md) — read them and append
-those employer names to the matrix's `exclude_employers`. A cabinet
-that fooled one run must never reach a second one in this workspace,
-whatever it is called and whatever the industry.
+**Self-healing exclusions — two levels.** (1) Workspace: when compiling
+the matrix, fold the workspace's kill flags into it — every intermediary
+unmasked by ANY brick downstream (signal-person, enrich, a manual kill)
+is recorded in `memory/` (state.json kill flags / NOTES.md); read them
+and append those employer names to the matrix's `exclude_employers`.
+(2) **Plugin — the cumulative memory**: an opaque-brand cabinet that the
+employer-identity wave WEB-VERIFIED belongs in
+`tools/jobs.py` `KNOWN_STAFFING_BRANDS` — say so in the receipt so the
+field-test loop appends it (workspace learning evaporates on every fresh
+workspace; Voluntae was re-verified three runs in a row before this
+list existed). A cabinet that fooled one run must never reach a second
+one, whatever it is called, whatever the industry, whatever the
+workspace.
 
 ## Phase 1 — the hunt (script first, SERP as escalation)
 
