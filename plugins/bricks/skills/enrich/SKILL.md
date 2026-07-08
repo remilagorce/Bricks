@@ -33,7 +33,8 @@ conversation, never fetch pages per row in the session.
      --ai '{"prompt":"...{{name}} ({{domain}})...","schema":{"type":"object","properties":{"hq_city":{"type":"string"}}},"web":true,"model":"haiku"}' \
      --status-col hq_status
    ```
-   Show the 10 results to the user. NOTHING is written.
+   Read **stderr** line by line while it runs — relay each `preview_row` to
+   the user as it arrives; stdout is the final receipt only. NOTHING is written.
 3. **GO** — one explicit user confirmation.
 4. **Commit** — the exact same command + `--commit` (no `--limit` = the whole
    table).

@@ -7,19 +7,17 @@ row by runner.py. Runs on the Claude Agent SDK (pip: claude-agent-sdk), which
 drives the local `claude` CLI in-process: typed messages, native MCP,
 guaranteed structured output.
 
-Auth follows the SDK/CLI precedence (first found wins), inherited from
-~/.bricks/env and the environment:
-  1. ANTHROPIC_API_KEY        -> API billing (pay-per-token, opt-in)
-  2. CLAUDE_CODE_OAUTH_TOKEN  -> the Claude SUBSCRIPTION (the default —
-                                 generated once with `claude setup-token`)
-  3. the interactive `claude` login (Keychain) -> subscription too
+Inside a Claude Code session (``CLAUDE_PLUGIN_ROOT`` set), workers inherit the
+same subscription (Keychain / env) — but NOT the session's MCP servers or
+settings (``strict_mcp_config`` + ``setting_sources=[]``): a disposable worker
+gets exactly the tools it asks for (Bright Data when ``web=True``, nothing
+otherwise), never whatever happens to be configured in the calling session or
+project. Standalone (no session): falls back to ``~/.bricks/env`` for auth and
+builds the same inline Bright Data MCP when ``web=True``.
 
-- web=False (default): the agent reasons ONLY on the prompt content — the
-  row's data is injected in the prompt by the caller, never fetched.
-- web=True: adds the Bright Data MCP (BRIGHTDATA_API_TOKEN), navigation
-  capped by max_pages.
-- schema=<JSON schema dict>: the answer is GUARANTEED to validate against it
-  (SDK output_format) -> returns the parsed dict. schema=None -> raw text.
+- web=False: reasons only on the prompt — row data is injected, never fetched.
+- web=True: Bright Data MCP, navigation capped by max_pages.
+- schema=<JSON schema dict>: guaranteed structured output.
 
 Callable both ways:
     from agent import agent
@@ -32,6 +30,7 @@ import argparse
 import asyncio
 import json
 import os
+import shutil
 import sys
 
 DEFAULT_TIMEOUT = 120
@@ -39,20 +38,26 @@ DEFAULT_MAX_PAGES = 5
 BRIGHTDATA_URL = "https://mcp.brightdata.com/mcp?token={token}&pro=1"
 
 AUTH_HINT = (
-    "aucune authentification Claude trouvée — le moteur tourne sur ton "
-    "ABONNEMENT par défaut : génère un token une fois avec `claude setup-token` "
-    "puis stocke-le dans ~/.bricks/env (CLAUDE_CODE_OAUTH_TOKEN=<token>). "
-    "Alternative facturée au token : ANTHROPIC_API_KEY.")
+    "le worker n'a pas pu réutiliser l'auth de la session — vérifie que tu es "
+    "connecté dans Claude Code, ou stocke un token dans ~/.bricks/env "
+    "(CLAUDE_CODE_OAUTH_TOKEN via `claude setup-token`, ou ANTHROPIC_API_KEY)."
+)
+
+INIT_HINT = (
+    "Control request timeout: initialize — le sous-processus n'a pas pu "
+    "s'authentifier ni charger les MCP. Relance depuis une session Claude Code "
+    "connectée, ou configure ~/.bricks/env."
+)
 
 
 class AgentError(RuntimeError):
     """The agent could not be configured or could not produce an answer."""
 
 
-# Self-load ~/.bricks/env before anything runs (subscription token, Bright Data
-# token…). Same loader the front's settings panel writes to — one source of truth.
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import envfile  # noqa: E402
+import session_auth  # noqa: E402
+
 envfile.load()
 
 
@@ -65,14 +70,56 @@ def _sdk():
                          "pip3 install --user --break-system-packages claude-agent-sdk") from exc
 
 
-def _with_auth_hint(message: str) -> str:
-    has_cred = (os.environ.get("ANTHROPIC_API_KEY", "").strip()
-                or os.environ.get("CLAUDE_CODE_OAUTH_TOKEN", "").strip())
-    looks_auth = any(w in message.lower() for w in
+def _auth_hint(message: str) -> str:
+    low = message.lower()
+    if "initialize" in low or "control request timeout" in low:
+        return f"{message}\n{INIT_HINT}"
+    looks_auth = any(w in low for w in
                      ("auth", "credential", "login", "unauthor", "401", "api key"))
-    if not has_cred and (looks_auth or "exit" in message.lower()):
+    if not session_auth.has_env_auth() and (looks_auth or "exit" in low):
         return f"{message}\n{AUTH_HINT}"
     return message
+
+
+def _build_options(sdk, *, web: bool, schema: dict | None, model: str | None,
+                   max_pages: int):
+    """Session mode: plugin MCP + settings. Standalone: inline Bright Data."""
+    kwargs: dict = {
+        "model": model or None,
+        "max_turns": (max_pages * 2 + 4) if web else 4,
+        "permission_mode": "bypassPermissions",
+        "cwd": os.getcwd(),
+        "tools": [],
+        # Without this the child CLI also loads the CALLER's own project/user
+        # MCP servers and settings (a totally unrelated MCP server from the
+        # parent session, or a second same-named "brightdata"/"fullenrich"
+        # entry with an unresolved ${TOKEN} placeholder) on top of what we
+        # build below — silently colliding with it and causing the
+        # "Control request timeout: initialize" failure (see INIT_HINT).
+        "strict_mcp_config": True,
+        "setting_sources": [],
+    }
+    plugin = session_auth.plugin_root()
+    if plugin:
+        kwargs["plugins"] = [{"type": "local", "path": plugin}]
+    if web:
+        token = os.environ.get("BRIGHTDATA_API_TOKEN", "").strip()
+        if not token:
+            raise AgentError(
+                "web=True needs BRIGHTDATA_API_TOKEN — connect Bright Data via "
+                "/mcp in the session, or set it in ~/.bricks/env")
+        kwargs["mcp_servers"] = {"brightdata": {
+            "type": "http", "url": BRIGHTDATA_URL.format(token=token)}}
+        kwargs["allowed_tools"] = ["mcp__brightdata__*"]
+    if schema:
+        kwargs["output_format"] = {"type": "json_schema", "schema": schema}
+    auth_env = session_auth.subprocess_auth_env()
+    if auth_env:
+        kwargs["env"] = auth_env
+    cli = shutil.which("claude")
+    if cli:
+        kwargs["cli_path"] = cli
+    return sdk.ClaudeAgentOptions(**kwargs)
 
 
 def agent(prompt: str, web: bool = False, schema: dict | None = None,
@@ -82,19 +129,8 @@ def agent(prompt: str, web: bool = False, schema: dict | None = None,
     if not (prompt or "").strip():
         raise AgentError("empty prompt")
     sdk = _sdk()
-    kwargs: dict = {"model": model or None, "max_turns": 4}
-    if web:
-        token = os.environ.get("BRIGHTDATA_API_TOKEN", "").strip()
-        if not token:
-            raise AgentError("web=True needs BRIGHTDATA_API_TOKEN in the environment "
-                             "(~/.bricks/env)")
-        kwargs["mcp_servers"] = {"brightdata": {
-            "type": "http", "url": BRIGHTDATA_URL.format(token=token)}}
-        kwargs["allowed_tools"] = ["mcp__brightdata__*"]
-        kwargs["max_turns"] = max_pages * 2 + 4
-    if schema:
-        kwargs["output_format"] = {"type": "json_schema", "schema": schema}
-    options = sdk.ClaudeAgentOptions(**kwargs)
+    options = _build_options(sdk, web=web, schema=schema, model=model,
+                             max_pages=max_pages)
 
     async def _consume():
         final = None
@@ -113,9 +149,9 @@ def agent(prompt: str, web: bool = False, schema: dict | None = None,
     except asyncio.TimeoutError as exc:
         raise AgentError(f"agent timed out after {timeout}s") from exc
     except AgentError as exc:
-        raise AgentError(_with_auth_hint(str(exc))) from exc
-    except Exception as exc:  # CLINotFoundError, ProcessError, CLIConnectionError…
-        raise AgentError(_with_auth_hint(f"{type(exc).__name__}: {str(exc)[:300]}")) from exc
+        raise AgentError(_auth_hint(str(exc))) from exc
+    except Exception as exc:
+        raise AgentError(_auth_hint(f"{type(exc).__name__}: {str(exc)[:300]}")) from exc
 
     output = final.structured_output if schema else final.result
     if output is None:

@@ -19,8 +19,9 @@ Two kinds of steps:
   returns the structured dict (schema properties = columns to write).
 
 THE IRON GATE — preview before any mass write:
-- WITHOUT --commit: processes the first 10 eligible rows, prints every
-  result, writes NOTHING (not even a status).
+- WITHOUT --commit: processes the first 10 eligible rows, streams each
+  result to stderr as it completes (NDJSON, one line per row), then prints
+  the full receipt on stdout. Writes NOTHING (not even a status).
 - WITH --commit: --status-col is required; each row goes
   running -> steps -> done (or failed + <base>_error). Statuses are the
   checkpoint: re-running the same command resumes the remaining pending rows.
@@ -53,6 +54,12 @@ TEMPLATE_RE = re.compile(r"\{\{(\w+)\}\}")
 
 class RunnerError(ValueError):
     """Raised on any invalid run configuration. Nothing is written."""
+
+
+def _emit_preview(event: str, **payload) -> None:
+    """Stream one preview event to stderr — visible while rows still run."""
+    print(json.dumps({"event": event, **payload}, ensure_ascii=False),
+          file=sys.stderr, flush=True)
 
 
 def load_step(spec: str):
@@ -165,6 +172,8 @@ def run(table: str, steps: list, status_col: str | None = None,
     error_col = f"{base}_error" if base else None
 
     results, done, failed = [], 0, 0
+    if not commit and rows:
+        _emit_preview("preview_start", table=table, count=len(rows))
     with ThreadPoolExecutor(max_workers=workers) as pool:
         def work(row):
             try:
@@ -187,6 +196,13 @@ def run(table: str, steps: list, status_col: str | None = None,
         futures = [pool.submit(work, row) for row in rows]
         for future in as_completed(futures):
             outcome = future.result()
+            if not commit:
+                row_event = {"_id": outcome["_id"]}
+                if "error" in outcome:
+                    row_event["error"] = outcome["error"]
+                else:
+                    row_event["fields"] = outcome["fields"]
+                _emit_preview("preview_row", **row_event)
             results.append(outcome)
             if "error" in outcome:
                 failed += 1

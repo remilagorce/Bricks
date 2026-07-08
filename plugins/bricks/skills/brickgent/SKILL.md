@@ -13,18 +13,12 @@ Specialized bricks (enrich-firmographics, enrich-buying-committee…) stay
 preferred when they cover the need — brickgent is for everything they
 don't.
 
-**Cost & auth doctrine** — brickgent is the engine's AI lane, and it
-runs on your Claude **subscription by default** (flat cost —
-`CLAUDE_CODE_OAUTH_TOKEN` from `claude setup-token`, or the `claude`
-login). It switches to API billing only if `ANTHROPIC_API_KEY` is
-deliberately set (higher, scalable rate limits — the opt-in for very
-large volume). The real ceiling is the subscription's **rate limits**,
-not per-token dollars: always prefer a cheap model (`sonnet` by
-default, `haiku` for simple judgments — raising it is said to the user,
-never silent) to conserve quota, announce the run before the mass, and
-keep deterministic work OUT of this brick. `--tools web` also needs
-`BRIGHTDATA_API_TOKEN` (all self-loaded from `~/.bricks/env`, §11 —
-missing auth: the tools answer with the exact fix, relay it).
+**Cost & auth doctrine** — brickgent is the engine's AI lane. Inside a Claude
+Code session, workers **inherit the same subscription and MCP** as the session
+(plugin ``.mcp.json`` + user settings; Keychain auth is propagated to the
+SDK subprocess). ``~/.bricks/env`` is only needed for standalone runs outside
+a session, or for ``BRIGHTDATA_API_TOKEN`` when Bright Data isn't connected via
+``/mcp``. API billing only if ``ANTHROPIC_API_KEY`` is deliberately set.
 
 **Prompt discipline** — ALWAYS generate a precise, structured prompt:
 
@@ -62,16 +56,22 @@ order:
    lines, confirm ONCE.
 3. **Init the status column** on rows in scope (`db.py modify --set
    <slug>_status=pending`, §5), then **dry-run** — computes the first
-   10 rows, shows them, writes NOTHING (Rule 5):
+   10 rows, streams each result as it finishes, writes NOTHING (Rule 5).
+   While the command runs, **read stderr line by line** and relay each
+   `preview_row` to the user so they see progress — do not wait for the
+   final stdout JSON:
 
 ```bash
-python3 "${CLAUDE_PLUGIN_ROOT}/tools/runner.py" run \
-  --db <bricks.db> --table <table> --claim <slug>_status \
-  --handler agent \
-  --prompt '###Context### … ###Instruction### … {{name}} {{domain}} …' \
-  --schema '{"fields": {"…": "…"}, "evidence": true}' \
-  [--tools web] [--model sonnet] --run-id <slug>-<date> --limit 10
+python3 "${CLAUDE_PLUGIN_ROOT}/tools/core/runner.py" --table <table> \
+  --ai '{"prompt":"###Context### … ###Instruction### … {{name}} {{domain}} …",
+         "schema":{"type":"object","properties":{"…":{"type":"string"}}},
+         "web":true,"model":"sonnet"}' \
+  --status-col <slug>_status --limit 10
 ```
+
+Stderr NDJSON events: `preview_start` (count), then one `preview_row`
+per finished row (`_id` + `fields` or `error`). Stdout = final receipt
+only after all rows complete.
 
 4. **Confirmation (GO)** → same command with `--commit` — the whole
    table, tranches, wave writes, resumable; the manifest embeds the

@@ -119,8 +119,13 @@ each step is a plain function. **Always preview first** (Rule 2).
 | `--commit` | Write results (only after preview + user GO) |
 | `--limit` | Preview caps at 10; commit processes all pending rows |
 
+**Preview streaming:** without `--commit`, each finished row is flushed to
+**stderr** as NDJSON (`preview_start`, then one `preview_row` per row).
+Relay those lines to the user while the command runs; stdout is the final
+receipt only.
+
 ```bash
-# PREVIEW — writes nothing
+# PREVIEW — writes nothing; stderr streams rows as they finish
 python3 "${CLAUDE_PLUGIN_ROOT}/tools/core/runner.py" --table companies \
   --ai '{"prompt":"HQ city for {{name}} ({{domain}})","schema":{"type":"object","properties":{"hq_city":{"type":"string"}}},"web":true,"model":"haiku"}' \
   --status-col hq_status
