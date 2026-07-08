@@ -163,6 +163,33 @@ python3 "${CLAUDE_PLUGIN_ROOT}/tools/core/agent.py" \
 **When to use:** isolated one-off research (handful of rows). For table-wide
 enrichment, use `/bricks:enrich` → `runner.py`, not repeated `agent.py` calls.
 
+**Transport fallback:** `BRICKS_AGENT_TRANSPORT=api` routes the same `agent()`
+call through the Anthropic Messages API (`tools/core/agent_api.py`) — for
+machines where the Agent SDK stack cannot run (Bun requires AVX). Needs
+`ANTHROPIC_API_KEY` in `~/.bricks/env`; billed as API credits, not the
+subscription. Same contract: `--web` uses the API's MCP connector, `--schema`
+uses structured outputs.
+
+---
+
+## tools/providers/ — deterministic provider engines
+
+Provider-facing plumbing (HTTP, RSS, scraping) — zero model, zero database.
+Reusable by any skill; the `step` functions plug into `runner.py --step`.
+
+| Script | Purpose | Entry points |
+|---|---|---|
+| `firmo.py` | French official firmographics (recherche-entreprises.api.gouv.fr, free, 7 req/s self-limited) | `--name`/`--stdin` CLI; runner step `firmo.py:step` (reads `name`, writes siren/employees/industry/executives…) |
+| `fullenrich.py` | FullEnrich people search — wave cascade per company (`FULLENRICH_API_KEY`) | `--domain --params` CLI; runner step `fullenrich.py:step` (env `FULLENRICH_PARAMS`, `FULLENRICH_OUT_TABLE`; inserts verified contacts as child rows on commit) |
+| `jobs.py` | Hiring-signal hunt/check — France Travail + HelloWork + career pages, free | `hunt --matrix` (sourcing) / `check --companies` (tracked accounts) → JSONL files in `--out` |
+| `news.py` | Company news via Google News RSS, free | `--companies --out [--days] [--terms]` → JSONL files |
+
+```bash
+python3 "${CLAUDE_PLUGIN_ROOT}/tools/core/runner.py" --table companies \
+  --step "${CLAUDE_PLUGIN_ROOT}/tools/providers/firmo.py:step" \
+  --status-col firmo_status
+```
+
 ---
 
 ## Quick decision tree
@@ -174,7 +201,9 @@ Insert user-owned data?  → db.py add --rows '[{...}]'  (small)
 Insert sourced mass?     → save CSV → db.py import-csv <table> <file>
 Patch existing rows?     → db.py modify --updates '[{"_id":N,...}]'
 Enrich many rows (AI)?   → runner.py --ai ... (preview) → --commit
+Enrich many rows (provider)? → runner.py --step tools/providers/<x>.py:step
 One-off AI question?     → agent.py --prompt ...
+Hiring/news signals?     → tools/providers/jobs.py | news.py
 GTM sourcing?            → /bricks:find
 GTM enrichment?          → /bricks:enrich
 No ICP yet?              → /bricks:gtm-onboard

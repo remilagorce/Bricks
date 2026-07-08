@@ -128,6 +128,17 @@ def agent(prompt: str, web: bool = False, schema: dict | None = None,
     """Run ONE agent, return ONE answer (dict if schema, else str). Raises AgentError."""
     if not (prompt or "").strip():
         raise AgentError("empty prompt")
+    # BRICKS_AGENT_TRANSPORT=api routes the SAME call through the Anthropic
+    # Messages API (agent_api.py) — for machines where the SDK stack cannot
+    # run (Bun requires AVX). API credits instead of the subscription.
+    if os.environ.get("BRICKS_AGENT_TRANSPORT", "").strip().lower() == "api":
+        import agent_api
+        try:
+            return agent_api.agent_api(prompt, web=web, schema=schema,
+                                       model=model, max_pages=max_pages,
+                                       timeout=timeout)
+        except agent_api.AgentApiError as exc:
+            raise AgentError(str(exc)) from exc
     sdk = _sdk()
     options = _build_options(sdk, web=web, schema=schema, model=model,
                              max_pages=max_pages)

@@ -29,7 +29,7 @@ is mandatory, not optional. It is the shared contract every brick obeys
 files to the user). Do this before any other action in an onboarding.
 
 Then follow §2: run
-`python3 "${CLAUDE_PLUGIN_ROOT}/tools/workspace.py" status`. Do NOT edit any
+`python3 "${CLAUDE_PLUGIN_ROOT}/tools/core/workspace.py" status`. Do NOT edit any
 file here — the status output is the raw material for Phase 0's routing
 decision. When a current workspace exists, read the offer and ICP context to
 know what is already defined (talk about their content, never their file

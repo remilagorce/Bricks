@@ -13,15 +13,32 @@ small, proves itself in real runs, then the next one starts.
 - MCP bundled : FullEnrich (OAuth), Bright Data (token)
 - Iron gate : preview 10 rows → GO → commit, statuses as checkpoint
 
+## v0.3 — the v0 port (shipped)
+
+Everything proven in v0 (clay-gtm-agent), adapted to this repo's contract
+(tools/core + steps, one execution path, CSV sourcing, iron gate):
+
+- `tools/providers/` : firmo.py (+ runner step), fullenrich.py (runner
+  step, child-row inserts), jobs.py (hunt/check), news.py — deterministic,
+  zero model, zero db
+- `tools/core/agent_api.py` : Messages-API transport for agent.py
+  (`BRICKS_AGENT_TRANSPORT=api`) — for machines where the SDK stack can't
+  run (Bun requires AVX)
+- Skills : transform, score (+ kernel/materialize scripts, judge via
+  agent.py), rank-accounts (+ frozen kernel), scan-mentions,
+  find-lookalike, find-directory-scrape, find-hiring-signal,
+  find-company-people, enrich-firmographics, enrich-buying-committee,
+  enrich-person-profile, signal-person, plan-outreach, write-outreach,
+  playbook-lookalike, playbook-outbound, context-write — the v0 BRICK.md
+  contracts folded into each SKILL.md; gtm-onboard/brickgent plumbing
+  repaired
+
 ## Next — in order of need, not of ambition
 
 | Block | Contract (IN → OUT) | Status |
 |---|---|---|
-| transform | existing table → cleaned/deduped/derived columns, zero external fetch | todo |
-| score | rows + natural-language rules → score column | todo |
-| outreach | enriched rows + context/ → draft messages (draft/approved/sent statuses) | todo |
+| outreach-send | approved drafts → sent emails (human-gated) | todo |
 | rollback & manifests | committed run → undo (only if real runs prove the need) | todo |
-| more skills from v0 (scan-mentions, find-company-people, ...) | ported one by one when a real workflow needs them | todo |
 
 ## Principles carried over from v0
 

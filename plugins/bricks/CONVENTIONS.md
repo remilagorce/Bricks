@@ -65,8 +65,9 @@ the same command with `--commit`. Statuses (`pending/running/done/failed` in a
 ## §7 — References & cost
 
 - Reference other skills as slash commands, never as file paths: `/bricks:find`,
-  `/bricks:enrich`, `/bricks:workspace`, `/bricks:gtm-onboard`,
-  `/bricks:tools-guide`.
+  `/bricks:enrich`, `/bricks:transform`, `/bricks:score`,
+  `/bricks:rank-accounts`, `/bricks:workspace`, `/bricks:gtm-onboard`,
+  `/bricks:tools-guide` — pattern `/bricks:<skill-directory-name>`.
 - The engine runs on the Claude **subscription** by default; prefer `haiku` for
   per-row work to spare the rate limits. Announce a batch's scope before you
   commit it.
