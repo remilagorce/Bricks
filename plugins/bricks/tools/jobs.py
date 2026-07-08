@@ -25,7 +25,8 @@ serial version — results are assembled in input order.
 
 matrix.json (hunt):
     {"titles": ["couvreur", ...],             REQUIRED - one query per title x location
-     "locations": ["33", "33D", "Bordeaux"],  dept number, France Travail code, or city
+     "locations": ["33", "69R", "Bordeaux"],  dept number, FT region code, or city
+                                              (legacy "<dept>D" accepted, auto-stripped: dead endpoint)
      "tools": ["PRODEVIS", ...],              matched in descriptions, never queried
      "pains": ["surcroit", ...],              matched in descriptions, never queried
      "negative": ["..."],                     extra agency brands to flag
@@ -73,6 +74,12 @@ AGENCY_TOKENS = [
     "advance emploi", "samsic emploi", "job&box", "sovitrat", "up skills",
     "expectra", "hays", "page personnel", "leader", "get carrieres",
     "tt",  # 'TRIDENT TT' — travail-temporaire suffix, word-boundary safe
+    # Executive/finance recruiting firms that slipped through a field run
+    # (2026-07: Michael Page, LHH, Comptalents, Cliff Partners reached the
+    # judgment pass) + their frequent siblings on finance searches:
+    "michael page", "pagegroup", "lhh", "comptalents", "cliff partners",
+    "robert half", "fed finance", "robert walters", "walters people",
+    "fyte", "grant alexander", "harry hope", "winsearch",
 ]
 STAGE_RE = re.compile(r"\b(stage|stagiaire|alternan\w*|apprenti\w*)\b", re.I)
 CONTRACT_RE = re.compile(
@@ -205,9 +212,15 @@ def agency_suspect(company, title, extra_negative):
 
 def ft_location_code(loc):
     loc = (loc or "").strip()
+    # The historic "<dept>D" département code is DEAD: it now 301s to a
+    # pretty URL that answers 410 (field-tested 2026-07: whole "chef
+    # comptable" sweeps returned 410). The bare dept number is what the
+    # search endpoint accepts today (verified live: 200 + offer cards).
     if re.fullmatch(r"\d{2,3}", loc):
-        return f"{loc}D"
-    if re.fullmatch(r"\d{1,3}[DR]|\d{5}", loc):
+        return loc
+    if re.fullmatch(r"\d{2,3}D", loc):
+        return loc[:-1]  # strip the dead suffix from caller-supplied codes
+    if re.fullmatch(r"\d{1,3}R|\d{5}", loc):
         return loc
     return None  # free-text city: goes into motsCles instead
 

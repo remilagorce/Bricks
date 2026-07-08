@@ -15,10 +15,11 @@ in this directory's BRICK.md.
 
 ## Before anything
 
-Follow `${CLAUDE_PLUGIN_ROOT}/CONVENTIONS.md` §2 and §3 — HARD context
-gate here (like write-outreach): the pain matrix derives from
-`context/offer.md` + `context/icp.md`; if they are TODO placeholders,
-stop and fill them first. Bright Data is the preferred engine; when
+Follow `${CLAUDE_PLUGIN_ROOT}/CONVENTIONS.md` §2 and §3 — context gate:
+the pain matrix derives from `context/offer.md` + `context/icp.md`. TODO
+placeholders → apply §3: infer an announced v1 from the goal/request
+when the substance is there (don't stall the hunt behind an interview),
+ask the three quick questions only when it is not. Bright Data is the preferred engine; when
 it is down, the free channel (built-in web search + page fetch)
 carries the run — field-tested at equal quality during a full outage.
 FullEnrich is not needed by this brick.
@@ -44,8 +45,10 @@ Every query encodes ONE GTM hypothesis —
 `"startup jobs France"`. Show 3 example queries with the matrix.
 
 **Below the big-spend threshold (§8, default 50 credits) the run does
-not ask at all**: the matrix + budget + cut (default ≥ 70, 50-69
-parked in staging) are ANNOUNCED and the hunt proceeds — a wrong
+not ask at all**: the matrix + budget + cut (RELATIVE — see Phase 3:
+commit ≥ 65 % of the points REACHABLE for this ICP, park 45-65 %;
+announce the computed absolute numbers) are ANNOUNCED and the hunt
+proceeds — a wrong
 matrix costs ~0 with jobs.py, and the user adjusts after the receipt.
 Above the threshold: ONE grouped GO for everything (field-tested: 5-6
 serial gates per run is what makes it slow). It
@@ -126,12 +129,25 @@ and adjust where keyword matching misread context. Full grid /100:
 | ≥ 2 relevant offers within 60 days | 15 |
 | company size fits the ICP (when visible) | 10 |
 
-The cut was declared at the phase-0 GO (default: commit ≥ 70, park
-50-69 in staging). Apply it and show the distribution (≥ 70 / 50-69 /
-< 50) in the receipt; return to the user ONLY if it looks absurd
-(everything < 50, or > 90 % passing). This score is the brick's
-sourcing filter, not the ICP score — the score brick still runs on
-these rows like on any other.
+**The cut is RELATIVE to the points reachable at sourcing — never an
+absolute 70.** Two of the grid's criteria are structurally out of reach
+on some ICPs: size (10) is never visible in a job ad (it is deferred to
+enrichment), and the ≥2-offers volume bonus (15) rewards big employers —
+an independent SME hires ONE chef comptable, not three. Field-tested
+twice: with those 25 points unreachable the ceiling is ~60-75, an
+absolute ≥ 70 commits (almost) nothing, and every run had to improvise a
+~45-50 override. When the same override happens every run, the rule is
+wrong — so the rule is now: compute `reachable` = 100 minus the criteria
+this ICP cannot mechanically produce (size when unknown at sourcing;
+volume bonus when the ICP is single-offer SMEs), then **commit ≥ 65 % of
+reachable, park 45-65 %** (SMB example: reachable 75 → commit ≥ 49, park
+34-49; a multi-offer scaleup hunt keeps reachable 90-100 → the bar stays
+high automatically). Declare the computed absolute numbers at the
+phase-0 GO. Apply it and show the distribution (commit / parked /
+rejected) in the receipt; return to the user ONLY if it looks absurd
+(everything below the park band, or > 90 % passing). This score is the
+brick's sourcing filter, not the ICP score — the score brick still runs
+on these rows like on any other.
 
 ## Phase 4 — commit and hand over
 
@@ -166,8 +182,9 @@ proof, never as a creepy opener — "vous structurez votre équipe RevOps
 autour de HubSpot et du lead routing…", NOT "j'ai vu que vous
 recrutez". write-outreach picks it up as-is.
 
-Receipt: "X companies committed (score ≥ 70), Y parked in staging
-(50-69), Z rejected (top reasons). Credits: A queries + B pages, en
+Receipt: "X companies committed (score ≥ <computed cut>), Y parked in
+staging (park band), Z rejected (top reasons). Credits: A queries + B
+pages, en
 `elapsed_s` (relayé depuis le receipt de jobs.py — §8 wall-time)." Max
 3 sample rows. Then STATE the next step, never ASK it (§8, house rule
 0.8.1 — field-tested drift: this receipt shipped ending with "tu veux

@@ -63,9 +63,20 @@ user always knows which world they are in.
 `context/` is the client brain. Before any sourcing (find), enrichment or
 writing task, read `context/offer.md` and `context/icp.md` of the CURRENT
 workspace (and the relevant `personas/` file for writing tasks). If they
-are still TODO placeholders, offer to fill them first — three quick
-questions: what do you sell (one sentence)? who is the ideal customer? any
-hard disqualifiers (size, country…)?
+are still TODO placeholders:
+
+- **Enough substance in the request/goal to infer them** → write an
+  announced v1 draft yourself and proceed (say in one line what you
+  inferred and that the user corrects at will) — do NOT stall a sourcing
+  run behind an interview the input already answers (field-tested: an
+  agent auto-filled the offer from the workspace goal and the run was
+  right to continue). Ask only the fields you genuinely cannot infer.
+- **Not enough substance** → ask the three quick questions: what do you
+  sell (one sentence)? who is the ideal customer? any hard disqualifiers
+  (size, country…)?
+
+Writing tasks (write-outreach) keep their own HARD gates — an inferred
+offer is good enough to hunt with, not to speak with.
 
 **Drift guardrail.** If the user's request contradicts the current
 workspace's context — a different product than `offer.md`, a different
